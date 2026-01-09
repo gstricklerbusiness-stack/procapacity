@@ -418,7 +418,7 @@ export default async function DashboardPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {recentProjects.slice(0, 5).map((project) => (
+                {recentProjects.slice(0, 5).map((project: (typeof recentProjects)[number]) => (
                   <Link
                     key={project.id}
                     href={`/projects/${project.id}`}
