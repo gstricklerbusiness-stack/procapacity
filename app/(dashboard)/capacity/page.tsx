@@ -59,7 +59,7 @@ export default async function CapacityPage({ searchParams }: CapacityPageProps) 
     select: { role: true },
     distinct: ["role"],
   });
-  const roles = allRoles.map((r) => r.role);
+  const roles = allRoles.map((r: { role: string }) => r.role);
 
   // Get unique skills for Who's Free search
   const allSkills = await prisma.teamMember.findMany({
