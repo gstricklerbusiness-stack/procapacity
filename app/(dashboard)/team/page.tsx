@@ -32,12 +32,18 @@ export default async function TeamPage() {
   const isOwner = session.user.role === "OWNER";
 
   // Calculate summary metrics
-  const activeMembers = teamMembers.filter((m) => m.active);
-  const totalCapacity = activeMembers.reduce((sum, m) => sum + m.defaultWeeklyCapacityHours, 0);
+  const activeMembers = teamMembers.filter((m: (typeof teamMembers)[number]) => m.active);
+  const totalCapacity = activeMembers.reduce(
+    (sum: number, m: (typeof activeMembers)[number]) => sum + m.defaultWeeklyCapacityHours,
+    0
+  );
   
   // Calculate current week utilization for each active member
-  const utilizationStats = activeMembers.map((member) => {
-    const assignedHours = member.assignments.reduce((sum, a) => sum + a.hoursPerWeek, 0);
+  const utilizationStats = activeMembers.map((member: (typeof activeMembers)[number]) => {
+    const assignedHours = member.assignments.reduce(
+      (sum: number, a: (typeof member.assignments)[number]) => sum + a.hoursPerWeek,
+      0
+    );
     return {
       id: member.id,
       assignedHours,
@@ -48,13 +54,18 @@ export default async function TeamPage() {
     };
   });
 
-  const totalAssignedHours = utilizationStats.reduce((sum, m) => sum + m.assignedHours, 0);
+  const totalAssignedHours = utilizationStats.reduce(
+    (sum: number, m: (typeof utilizationStats)[number]) => sum + m.assignedHours,
+    0
+  );
   const avgUtilization = totalCapacity > 0 ? (totalAssignedHours / totalCapacity) * 100 : 0;
-  const overCapacityCount = utilizationStats.filter((m) => m.utilization > 1).length;
+  const overCapacityCount = utilizationStats.filter(
+    (m: (typeof utilizationStats)[number]) => m.utilization > 1
+  ).length;
 
   // Create utilization map for the table
   const utilizationMap = Object.fromEntries(
-    utilizationStats.map((s) => [s.id, s])
+    utilizationStats.map((s: (typeof utilizationStats)[number]) => [s.id, s])
   );
 
   return (
