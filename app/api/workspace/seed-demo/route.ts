@@ -175,7 +175,7 @@ export async function POST() {
 
     // Map projects by name for easy reference
     const projectByName = Object.fromEntries(
-      projects.map((p) => [p.name, p])
+      projects.map((p: (typeof projects)[number]) => [p.name, p])
     );
 
     // Create assignments with specific utilization patterns:
@@ -274,10 +274,13 @@ export async function POST() {
 
     // Create all billable assignments
     const assignments = await Promise.all(
-      assignmentData.map((data) => {
-        const project = projects.find((p) => p.id === data.projectId)!;
-        const projectDef = DEMO_PROJECTS.find((p) => 
-          projectByName[p.name]?.id === data.projectId
+      assignmentData.map((data: (typeof assignmentData)[number]) => {
+        const project = projects.find(
+          (p: (typeof projects)[number]) => p.id === data.projectId
+        )!;
+        const projectDef = DEMO_PROJECTS.find(
+          (p: (typeof DEMO_PROJECTS)[number]) =>
+            projectByName[p.name]?.id === data.projectId
         )!;
 
         return prisma.assignment.create({
