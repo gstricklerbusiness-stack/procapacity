@@ -27,10 +27,15 @@ export default async function ProjectsPage() {
   });
 
   // Calculate workload for each project
-  const projectsWithWorkload = projects.map((project) => ({
+  const projectsWithWorkload = projects.map((project: (typeof projects)[number]) => ({
     ...project,
-    totalHoursPerWeek: project.assignments.reduce((sum, a) => sum + a.hoursPerWeek, 0),
-    uniqueAssignees: new Set(project.assignments.map((a) => a.teamMemberId)).size,
+    totalHoursPerWeek: project.assignments.reduce(
+      (sum: number, a: (typeof project.assignments)[number]) => sum + a.hoursPerWeek,
+      0
+    ),
+    uniqueAssignees: new Set(
+      project.assignments.map((a: (typeof project.assignments)[number]) => a.teamMemberId)
+    ).size,
   }));
 
   const isOwner = session.user.role === "OWNER";
