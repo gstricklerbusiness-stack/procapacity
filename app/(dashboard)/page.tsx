@@ -71,7 +71,7 @@ export default async function DashboardPage() {
 
   // Count over-capacity warnings
   const overCapacityCount = utilizationData.filter((m: (typeof utilizationData)[number]) =>
-    m.utilization.some((u) => u.ratio > 1)
+    m.utilization.some((u: { ratio: number }) => u.ratio > 1)
   ).length;
 
   // Get recent projects
