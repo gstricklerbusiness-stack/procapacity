@@ -344,7 +344,7 @@ export default async function DashboardPage() {
                   ))}
                 </div>
                 {/* Team member rows */}
-                {utilizationData.slice(0, 6).map((member) => (
+                {utilizationData.slice(0, 6).map((member: (typeof utilizationData)[number]) => (
                   <div
                     key={member.id}
                     className="grid grid-cols-[1fr_repeat(4,52px)] gap-2 items-center py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800/30 rounded-lg px-1 -mx-1 transition-colors"
@@ -355,7 +355,7 @@ export default async function DashboardPage() {
                         {member.name}
                       </span>
                     </div>
-                    {member.utilization.map((util, idx) => (
+                    {member.utilization.map((util: (typeof utilizationData)[number]["utilization"][number], idx: number) => (
                       <div
                         key={idx}
                         className={`h-8 rounded-md text-xs font-semibold flex items-center justify-center transition-transform hover:scale-105 ${getUtilizationColor(
