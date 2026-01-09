@@ -301,7 +301,7 @@ export async function POST() {
 
     // Add internal time for Tom (8h/week on Internal/Admin)
     const internalProject = internalProjects.find(
-      (p) => p.name === "Internal / Admin"
+      (p: (typeof internalProjects)[number]) => p.name === "Internal / Admin"
     );
     if (internalProject) {
       await prisma.assignment.create({
