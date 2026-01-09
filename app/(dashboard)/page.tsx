@@ -59,7 +59,7 @@ export default async function DashboardPage() {
   const weeks = Array.from({ length: 4 }, (_, i) => addWeeks(weekStart, i));
 
   // Get utilization data
-  const utilizationData = teamMembers.map((member) => {
+  const utilizationData = teamMembers.map((member: typeof teamMembers[number]) => {
     const weeklyUtil = getWeeklyUtilization(member, weeks);
     return {
       id: member.id,
