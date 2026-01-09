@@ -54,15 +54,15 @@ export async function GET(request: Request) {
     select: { role: true },
     distinct: ["role"],
   });
-  const roles = allRoles.map((r) => r.role);
+  const roles = allRoles.map((r: { role: string }) => r.role);
 
   // Generate report data
-  const reportData = teamMembers.flatMap((member) => {
+  const reportData = teamMembers.flatMap((member: (typeof teamMembers)[number]) => {
     return weeks.map((weekStart) => {
       const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
       
       // Find overlapping assignments
-      const overlappingAssignments = member.assignments.filter((a) => {
+      const overlappingAssignments = member.assignments.filter((a: (typeof member.assignments)[number]) => {
         return (
           isWithinInterval(weekStart, { start: a.startDate, end: a.endDate }) ||
           isWithinInterval(a.startDate, { start: weekStart, end: weekEnd })
