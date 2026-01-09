@@ -146,7 +146,7 @@ export default async function SettingsPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {users.map((user) => (
+            {users.map((user: (typeof users)[number]) => (
               <div
                 key={user.id}
                 className="flex items-center justify-between p-3 rounded-xl bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700 transition-colors"
