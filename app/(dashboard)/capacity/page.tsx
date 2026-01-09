@@ -66,7 +66,7 @@ export default async function CapacityPage({ searchParams }: CapacityPageProps) 
     where: { workspaceId: session.user.workspaceId, active: true },
     select: { skills: true },
   });
-  const skills = Array.from(new Set(allSkills.flatMap((m) => m.skills)));
+  const skills = Array.from(new Set(allSkills.flatMap((m: any) => m.skills)));
 
   // Get workspace settings for thresholds and check for demo data
   const [workspace, hasDemoData] = await Promise.all([
