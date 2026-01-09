@@ -150,7 +150,7 @@ export async function POST() {
 
     // Map team members by name for easy reference
     const memberByName = Object.fromEntries(
-      teamMembers.map((m) => [m.name, m])
+      teamMembers.map((m: (typeof teamMembers)[number]) => [m.name, m])
     );
 
     // Create client projects
