@@ -56,13 +56,13 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
 
   // Calculate total hours per week
   const totalHoursPerWeek = project.assignments.reduce(
-    (sum, a) => sum + a.hoursPerWeek,
+    (sum: number, a: (typeof project.assignments)[number]) => sum + a.hoursPerWeek,
     0
   );
 
   // Calculate utilization impact for each assignment
-  const utilizationImpacts = project.assignments.map((assignment) => {
-    const member = teamMembers.find((m) => m.id === assignment.teamMemberId);
+  const utilizationImpacts = project.assignments.map((assignment: (typeof project.assignments)[number]) => {
+    const member = teamMembers.find((m: (typeof teamMembers)[number]) => m.id === assignment.teamMemberId);
     if (!member) {
       return {
         assignmentId: assignment.id,
@@ -83,7 +83,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
       
       // Sum hours from all overlapping assignments
       const totalHours = member.assignments
-        .filter((a) => {
+        .filter((a: (typeof member.assignments)[number]) => {
           const aStart = new Date(a.startDate);
           const aEnd = new Date(a.endDate);
           return (
@@ -91,7 +91,10 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
             isWithinInterval(aStart, { start: week, end: weekEnd })
           );
         })
-        .reduce((sum, a) => sum + a.hoursPerWeek, 0);
+        .reduce(
+          (sum: number, a: (typeof member.assignments)[number]) => sum + a.hoursPerWeek,
+          0
+        );
 
       const utilization = totalHours / member.defaultWeeklyCapacityHours;
       if (utilization > maxUtilization) {
@@ -195,7 +198,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
               {project.assignments.length} assignments
             </p>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              {new Set(project.assignments.map((a) => a.teamMemberId)).size} team
+              {new Set(project.assignments.map((a: (typeof project.assignments)[number]) => a.teamMemberId)).size} team
               members
             </p>
           </CardContent>
