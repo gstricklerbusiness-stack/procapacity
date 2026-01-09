@@ -70,12 +70,18 @@ export async function GET(request: Request) {
       });
 
       const billableHours = overlappingAssignments
-        .filter((a) => a.billable)
-        .reduce((sum, a) => sum + a.hoursPerWeek, 0);
+        .filter((a: (typeof overlappingAssignments)[number]) => a.billable)
+        .reduce(
+          (sum: number, a: (typeof overlappingAssignments)[number]) => sum + a.hoursPerWeek,
+          0
+        );
 
       const nonBillableHours = overlappingAssignments
-        .filter((a) => !a.billable)
-        .reduce((sum, a) => sum + a.hoursPerWeek, 0);
+        .filter((a: (typeof overlappingAssignments)[number]) => !a.billable)
+        .reduce(
+          (sum: number, a: (typeof overlappingAssignments)[number]) => sum + a.hoursPerWeek,
+          0
+        );
 
       const totalHours = billableHours + nonBillableHours;
       const capacity = member.defaultWeeklyCapacityHours;
