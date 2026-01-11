@@ -34,12 +34,12 @@ export function LoadDemoDataButton() {
   }
 
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex flex-col items-stretch gap-2">
       <Button
         onClick={handleLoadDemo}
         disabled={loading}
         size="lg"
-        className="gap-2"
+        className="gap-2 bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
       >
         {loading ? (
           <>
@@ -53,10 +53,11 @@ export function LoadDemoDataButton() {
           </>
         )}
       </Button>
-      <p className="text-xs text-slate-400 text-center max-w-xs">
-        Recommended for first-time users – see ProCapacity in action in 10 seconds.
-      </p>
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && (
+        <p className="text-sm text-red-500 text-center" role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

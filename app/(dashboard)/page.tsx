@@ -102,18 +102,23 @@ export default async function DashboardPage() {
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-4 items-center">
-          {isOwner && <LoadDemoDataButton />}
-          <span className="text-slate-400 text-sm">or</span>
-          <div className="flex gap-3">
-            <Link href="/team">
-              <Button variant="outline">
+        <div className="flex flex-col items-center gap-4 w-full">
+          <p className="text-sm text-slate-500 dark:text-slate-400 text-center max-w-xl">
+            Recommended for first-time users – see ProCapacity in action in 10 seconds.
+          </p>
+
+          <div className="w-full max-w-2xl grid grid-cols-3 gap-3 items-center">
+            <div className="w-full">
+              {isOwner && <LoadDemoDataButton />}
+            </div>
+            <Link href="/team" className="w-full">
+              <Button variant="outline" size="lg" className="w-full">
                 <Users className="h-4 w-4 mr-2" />
                 Add team members
               </Button>
             </Link>
-            <Link href="/projects">
-              <Button className="bg-emerald-600 hover:bg-emerald-500">
+            <Link href="/projects" className="w-full">
+              <Button size="lg" className="w-full bg-emerald-600 hover:bg-emerald-500">
                 <FolderKanban className="h-4 w-4 mr-2" />
                 Create a project
               </Button>
