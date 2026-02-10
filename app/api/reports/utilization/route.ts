@@ -42,6 +42,7 @@ export async function GET(request: Request) {
         where: {
           startDate: { lte: endDate },
           endDate: { gte: startDate },
+          project: { active: true },
         },
       },
     },

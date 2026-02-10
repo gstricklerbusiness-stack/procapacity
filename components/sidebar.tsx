@@ -13,6 +13,7 @@ import {
   Settings,
   Search,
   CreditCard,
+  Sparkles,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -31,6 +32,7 @@ const navigation = [
 ];
 
 const secondaryNavigation = [
+  { name: "Skills", href: "/settings/skills", icon: Sparkles },
   { name: "Billing", href: "/settings/billing", icon: CreditCard },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
@@ -165,6 +167,17 @@ export function Sidebar({ user }: SidebarProps) {
                 </ul>
               </li>
             </ul>
+            <div className="px-1 py-3 border-t border-slate-200 dark:border-slate-800">
+              <button
+                onClick={() => {
+                  document.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }));
+                }}
+                className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+              >
+                <kbd className="px-1 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-[10px] font-mono">?</kbd>
+                Keyboard shortcuts
+              </button>
+            </div>
           </nav>
         </div>
       </div>

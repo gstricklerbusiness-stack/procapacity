@@ -1,12 +1,29 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Users, Building2, Mail, Settings2, FolderKanban, User } from "lucide-react";
+import {
+  Users,
+  Building2,
+  Settings2,
+  FolderKanban,
+  User,
+  UserCheck,
+  Upload,
+} from "lucide-react";
 import { WorkspaceSettingsForm } from "@/components/workspace-settings-form";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
+import { UserStatusToggle } from "@/components/user-status-toggle";
+import { InviteMemberDialog } from "@/components/invite-member-dialog";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export default async function SettingsPage() {
   const session = await auth();
@@ -20,6 +37,8 @@ export default async function SettingsPage() {
       defaultCapacityHours: true,
       warningThreshold: true,
       criticalThreshold: true,
+      currentSeats: true,
+      includedSeats: true,
       _count: {
         select: {
           users: true,
@@ -36,6 +55,7 @@ export default async function SettingsPage() {
   });
 
   const isOwner = session.user.role === "OWNER";
+  const activeUsers = users.filter((u) => u.active).length;
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -70,15 +90,24 @@ export default async function SettingsPage() {
               {workspace?.name}
             </p>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <div className="text-center p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/30">
               <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center mx-auto mb-2">
-                <User className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                <UserCheck className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">
+                {activeUsers}
+              </p>
+              <p className="text-xs text-slate-500">Active Seats</p>
+            </div>
+            <div className="text-center p-4 rounded-xl bg-slate-50 dark:bg-slate-800/20 border border-slate-100 dark:border-slate-800/30">
+              <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800/40 flex items-center justify-center mx-auto mb-2">
+                <User className="h-5 w-5 text-slate-600 dark:text-slate-400" />
               </div>
               <p className="text-2xl font-bold text-slate-900 dark:text-white">
                 {workspace?._count.users || 0}
               </p>
-              <p className="text-xs text-slate-500">Users</p>
+              <p className="text-xs text-slate-500">Total Users</p>
             </div>
             <div className="text-center p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/30">
               <div className="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center mx-auto mb-2">
@@ -132,16 +161,20 @@ export default async function SettingsPage() {
       {/* Users */}
       <Card className="shadow-card">
         <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/40">
-              <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/40">
+                <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <CardTitle>Users</CardTitle>
+                <CardDescription>
+                  People with access to this workspace ({activeUsers} active of{" "}
+                  {users.length} total)
+                </CardDescription>
+              </div>
             </div>
-            <div>
-              <CardTitle>Users</CardTitle>
-              <CardDescription>
-                People with access to this workspace
-              </CardDescription>
-            </div>
+            {isOwner && <InviteMemberDialog />}
           </div>
         </CardHeader>
         <CardContent>
@@ -149,10 +182,17 @@ export default async function SettingsPage() {
             {users.map((user: (typeof users)[number]) => (
               <div
                 key={user.id}
-                className="flex items-center justify-between p-3 rounded-xl bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700 transition-colors"
+                className={`flex items-center justify-between p-3 rounded-xl border transition-colors ${
+                  user.active
+                    ? "bg-slate-50/50 dark:bg-slate-800/30 border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700"
+                    : "bg-slate-100/50 dark:bg-slate-900/30 border-slate-200 dark:border-slate-700 opacity-60"
+                }`}
               >
                 <div className="flex items-center gap-3">
-                  <AvatarInitials name={user.name || user.email} size="sm" />
+                  <AvatarInitials
+                    name={user.name || user.email}
+                    size="sm"
+                  />
                   <div>
                     <p className="font-medium text-slate-900 dark:text-white">
                       {user.name || "Unnamed"}
@@ -167,31 +207,61 @@ export default async function SettingsPage() {
                     </p>
                   </div>
                 </div>
-                <Badge
-                  variant={user.role === "OWNER" ? "default" : "secondary"}
-                  className={
-                    user.role === "OWNER"
-                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                      : ""
-                  }
-                >
-                  {user.role.toLowerCase()}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  {user.active ? (
+                    <Badge
+                      variant="secondary"
+                      className="bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                    >
+                      active
+                    </Badge>
+                  ) : (
+                    <Badge
+                      variant="secondary"
+                      className="bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400"
+                    >
+                      inactive
+                    </Badge>
+                  )}
+                  <Badge
+                    variant={user.role === "OWNER" ? "default" : "secondary"}
+                    className={
+                      user.role === "OWNER"
+                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                        : ""
+                    }
+                  >
+                    {user.role.toLowerCase()}
+                  </Badge>
+                  {isOwner && user.id !== session.user.id && (
+                    <UserStatusToggle
+                      userId={user.id}
+                      userName={user.name || user.email}
+                      active={user.active}
+                    />
+                  )}
+                </div>
               </div>
             ))}
           </div>
 
           {isOwner && (
             <div className="mt-6 p-6 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 text-center">
-              <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-3">
-                <Mail className="h-6 w-6 text-slate-400" />
+              <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mx-auto mb-3">
+                <Upload className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
               </div>
               <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                Team invitations
+                Import your team from a spreadsheet
               </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Coming soon
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 mb-3">
+                Upload a CSV or Excel file to add multiple users at once
               </p>
+              <Link href="/team/import">
+                <Button variant="outline" size="sm">
+                  <Upload className="h-3.5 w-3.5 mr-1.5" />
+                  Import Team
+                </Button>
+              </Link>
             </div>
           )}
         </CardContent>
@@ -212,24 +282,35 @@ export default async function SettingsPage() {
         </CardHeader>
         <CardContent>
           <div className="flex items-start gap-4 p-4 rounded-xl bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-800">
-            <AvatarInitials name={session.user.name || session.user.email || ""} size="lg" />
+            <AvatarInitials
+              name={session.user.name || session.user.email || ""}
+              size="lg"
+            />
             <div className="space-y-3 flex-1">
               <div>
-                <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Name</p>
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Name
+                </p>
                 <p className="font-semibold text-slate-900 dark:text-white">
                   {session.user.name}
                 </p>
               </div>
               <div>
-                <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Email</p>
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Email
+                </p>
                 <p className="font-medium text-slate-900 dark:text-white">
                   {session.user.email}
                 </p>
               </div>
               <div>
-                <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Role</p>
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Role
+                </p>
                 <Badge
-                  variant={session.user.role === "OWNER" ? "default" : "secondary"}
+                  variant={
+                    session.user.role === "OWNER" ? "default" : "secondary"
+                  }
                   className={
                     session.user.role === "OWNER"
                       ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 mt-1"
@@ -246,4 +327,3 @@ export default async function SettingsPage() {
     </div>
   );
 }
-

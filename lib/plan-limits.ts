@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { PLANS, isTrialExpired, type PlanId } from "@/lib/pricing";
+import { canAddSeat, calculateExtraSeats } from "@/lib/seat-utils";
 
 export interface PlanCheckResult {
   allowed: boolean;
@@ -7,10 +8,56 @@ export interface PlanCheckResult {
   upgradeRequired?: boolean;
 }
 
+export interface SeatCheckResult extends PlanCheckResult {
+  /** If true, adding this user will exceed included seats and trigger Stripe billing */
+  requiresStripeUpdate?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// canAddUser — checks seats (user accounts that can log in)
+// ---------------------------------------------------------------------------
+
 /**
- * Check if workspace can add more team members
+ * Check if the workspace can add another user (seat).
+ * Combines write-access check (trial / subscription status) with seat limit check.
  */
-export async function canAddTeamMember(workspaceId: string): Promise<PlanCheckResult> {
+export async function canAddUser(
+  workspaceId: string
+): Promise<SeatCheckResult> {
+  // First check write access
+  const writeAccess = await hasWriteAccess(workspaceId);
+  if (!writeAccess.allowed) {
+    return writeAccess;
+  }
+
+  // Then check seat availability
+  const seatCheck = await canAddSeat(workspaceId);
+
+  if (!seatCheck.allowed) {
+    return {
+      allowed: false,
+      reason: seatCheck.reason,
+      upgradeRequired: seatCheck.requiresUpgrade,
+    };
+  }
+
+  return {
+    allowed: true,
+    requiresStripeUpdate: seatCheck.requiresStripeUpdate,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// canAddTeamMember — checks team member resource limits (not seats)
+// ---------------------------------------------------------------------------
+
+/**
+ * Check if workspace can add more team members.
+ * TeamMembers don't consume seats unless they also have a User account.
+ */
+export async function canAddTeamMember(
+  workspaceId: string
+): Promise<PlanCheckResult> {
   const workspace = await prisma.workspace.findUnique({
     where: { id: workspaceId },
     select: {
@@ -29,7 +76,6 @@ export async function canAddTeamMember(workspaceId: string): Promise<PlanCheckRe
     return { allowed: false, reason: "Workspace not found" };
   }
 
-  // Check if trial expired and not subscribed
   if (isTrialExpired(workspace.trialEndsAt) && !workspace.subscribedAt) {
     return {
       allowed: false,
@@ -52,10 +98,16 @@ export async function canAddTeamMember(workspaceId: string): Promise<PlanCheckRe
   return { allowed: true };
 }
 
+// ---------------------------------------------------------------------------
+// canAddProject
+// ---------------------------------------------------------------------------
+
 /**
- * Check if workspace can add more projects
+ * Check if workspace can add more projects.
  */
-export async function canAddProject(workspaceId: string): Promise<PlanCheckResult> {
+export async function canAddProject(
+  workspaceId: string
+): Promise<PlanCheckResult> {
   const workspace = await prisma.workspace.findUnique({
     where: { id: workspaceId },
     select: {
@@ -74,7 +126,6 @@ export async function canAddProject(workspaceId: string): Promise<PlanCheckResul
     return { allowed: false, reason: "Workspace not found" };
   }
 
-  // Check if trial expired and not subscribed
   if (isTrialExpired(workspace.trialEndsAt) && !workspace.subscribedAt) {
     return {
       allowed: false,
@@ -97,10 +148,16 @@ export async function canAddProject(workspaceId: string): Promise<PlanCheckResul
   return { allowed: true };
 }
 
+// ---------------------------------------------------------------------------
+// hasWriteAccess
+// ---------------------------------------------------------------------------
+
 /**
- * Check if workspace has write access (not in read-only mode)
+ * Check if workspace has write access (not in read-only mode).
  */
-export async function hasWriteAccess(workspaceId: string): Promise<PlanCheckResult> {
+export async function hasWriteAccess(
+  workspaceId: string
+): Promise<PlanCheckResult> {
   const workspace = await prisma.workspace.findUnique({
     where: { id: workspaceId },
     select: {
@@ -113,7 +170,6 @@ export async function hasWriteAccess(workspaceId: string): Promise<PlanCheckResu
     return { allowed: false, reason: "Workspace not found" };
   }
 
-  // Check if trial expired and not subscribed
   if (isTrialExpired(workspace.trialEndsAt) && !workspace.subscribedAt) {
     return {
       allowed: false,
@@ -125,14 +181,20 @@ export async function hasWriteAccess(workspaceId: string): Promise<PlanCheckResu
   return { allowed: true };
 }
 
+// ---------------------------------------------------------------------------
+// getWorkspaceUsage — includes seat data
+// ---------------------------------------------------------------------------
+
 /**
- * Get workspace usage stats
+ * Get workspace usage stats including seat information.
  */
 export async function getWorkspaceUsage(workspaceId: string) {
   const workspace = await prisma.workspace.findUnique({
     where: { id: workspaceId },
     select: {
       plan: true,
+      currentSeats: true,
+      includedSeats: true,
       _count: {
         select: {
           teamMembers: { where: { active: true } },
@@ -145,7 +207,9 @@ export async function getWorkspaceUsage(workspaceId: string) {
 
   if (!workspace) return null;
 
-  const limits = PLANS[workspace.plan as PlanId].limits;
+  const plan = workspace.plan as PlanId;
+  const limits = PLANS[plan].limits;
+  const sp = PLANS[plan].seatPricing;
 
   return {
     teamMembers: {
@@ -163,6 +227,11 @@ export async function getWorkspaceUsage(workspaceId: string) {
       limit: limits.ownerUsers,
       percentage: (workspace._count.users / limits.ownerUsers) * 100,
     },
+    seats: {
+      current: workspace.currentSeats,
+      included: workspace.includedSeats,
+      max: sp.maxSeats,
+      extra: calculateExtraSeats(workspace.currentSeats, workspace.includedSeats),
+    },
   };
 }
-

@@ -57,6 +57,8 @@ import {
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ProgressBar } from "@/components/ui/progress-bar";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import type { HealthStatus } from "@/lib/project-health";
 
 interface ProjectWithWorkload extends Project {
   _count: {
@@ -64,14 +66,18 @@ interface ProjectWithWorkload extends Project {
   };
   totalHoursPerWeek: number;
   uniqueAssignees: number;
+  health?: { status: HealthStatus; reasons: string[] };
 }
 
 interface ProjectsTableProps {
   projects: ProjectWithWorkload[];
   isOwner: boolean;
+  workspaceUsers?: { id: string; name: string | null; email: string }[];
+  currentUserId?: string;
+  workspaceSkills?: { id: string; name: string; category: string }[];
 }
 
-export function ProjectsTable({ projects, isOwner }: ProjectsTableProps) {
+export function ProjectsTable({ projects, isOwner, workspaceUsers = [], currentUserId, workspaceSkills = [] }: ProjectsTableProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -105,8 +111,20 @@ export function ProjectsTable({ projects, isOwner }: ProjectsTableProps) {
             Active
           </Badge>
         );
+      case "ON_HOLD":
+        return (
+          <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 hover:bg-amber-100">
+            On Hold
+          </Badge>
+        );
       case "COMPLETED":
         return <Badge variant="secondary">Completed</Badge>;
+      case "ARCHIVED":
+        return (
+          <Badge variant="secondary" className="opacity-60">
+            Archived
+          </Badge>
+        );
       default:
         return <Badge variant="outline">Planned</Badge>;
     }
@@ -143,6 +161,8 @@ export function ProjectsTable({ projects, isOwner }: ProjectsTableProps) {
             <SelectItem value="all">All types</SelectItem>
             <SelectItem value="PROJECT">Project</SelectItem>
             <SelectItem value="RETAINER">Retainer</SelectItem>
+            <SelectItem value="CAMPAIGN">Campaign</SelectItem>
+            <SelectItem value="AUDIT">Audit</SelectItem>
           </SelectContent>
         </Select>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -153,7 +173,9 @@ export function ProjectsTable({ projects, isOwner }: ProjectsTableProps) {
             <SelectItem value="all">All statuses</SelectItem>
             <SelectItem value="PLANNED">Planned</SelectItem>
             <SelectItem value="ACTIVE">Active</SelectItem>
+            <SelectItem value="ON_HOLD">On Hold</SelectItem>
             <SelectItem value="COMPLETED">Completed</SelectItem>
+            <SelectItem value="ARCHIVED">Archived</SelectItem>
           </SelectContent>
         </Select>
         {hasActiveFilters && (
@@ -208,6 +230,7 @@ export function ProjectsTable({ projects, isOwner }: ProjectsTableProps) {
                 <TableHead className="font-semibold">Type</TableHead>
                 <TableHead className="font-semibold">Status</TableHead>
                 <TableHead className="hidden md:table-cell font-semibold">Dates</TableHead>
+                <TableHead className="text-center font-semibold">Health</TableHead>
                 <TableHead className="text-center font-semibold">Workload</TableHead>
                 {isOwner && <TableHead className="w-[50px]"></TableHead>}
               </TableRow>
@@ -280,6 +303,45 @@ export function ProjectsTable({ projects, isOwner }: ProjectsTableProps) {
                       </p>
                     </div>
                   </TableCell>
+                  <TableCell className="text-center">
+                    {project.health ? (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${
+                              project.health.status === "healthy"
+                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                                : project.health.status === "at-risk"
+                                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                                : project.health.status === "critical"
+                                ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                                : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                            }`}>
+                              <span className={`w-2 h-2 rounded-full ${
+                                project.health.status === "healthy"
+                                  ? "bg-emerald-500"
+                                  : project.health.status === "at-risk"
+                                  ? "bg-amber-500"
+                                  : project.health.status === "critical"
+                                  ? "bg-red-500"
+                                  : "bg-slate-400"
+                              }`} />
+                              {project.health.status === "na" ? "N/A" : project.health.status === "at-risk" ? "At Risk" : project.health.status.charAt(0).toUpperCase() + project.health.status.slice(1)}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="left">
+                            <div className="max-w-xs">
+                              {project.health.reasons.map((r, i) => (
+                                <p key={i} className="text-xs">{r}</p>
+                              ))}
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : (
+                      <span className="text-xs text-slate-400">—</span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-center gap-2">
                       {project.totalHoursPerWeek > 0 ? (
@@ -294,7 +356,9 @@ export function ProjectsTable({ projects, isOwner }: ProjectsTableProps) {
                           </Badge>
                         </>
                       ) : (
-                        <span className="text-xs text-slate-400 italic">No assignments</span>
+                        <Badge variant="outline" className="text-[10px] text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700">
+                          Unstaffed
+                        </Badge>
                       )}
                     </div>
                   </TableCell>
@@ -308,7 +372,7 @@ export function ProjectsTable({ projects, isOwner }: ProjectsTableProps) {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <ProjectModal mode="edit" project={project}>
+                          <ProjectModal mode="edit" project={project} workspaceUsers={workspaceUsers} currentUserId={currentUserId} workspaceSkills={workspaceSkills}>
                             <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                               <Pencil className="mr-2 h-4 w-4" />
                               Edit

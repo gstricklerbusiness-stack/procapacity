@@ -1,14 +1,20 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import { CapacityGrid } from "@/components/capacity-grid";
-import { WhosFreePanel } from "@/components/whos-free-panel";
 import { DemoDataBanner } from "@/components/demo-data-banner";
+import { CapacityPageClient } from "@/components/capacity/capacity-page-client";
 import { addWeeks, startOfWeek } from "date-fns";
 import { Suspense } from "react";
 
 interface CapacityPageProps {
-  searchParams: Promise<{ search?: string; weeks?: string; role?: string; highlight?: string }>;
+  searchParams: Promise<{
+    search?: string;
+    weeks?: string;
+    role?: string;
+    highlight?: string;
+    start?: string;
+    groupBy?: string;
+  }>;
 }
 
 export default async function CapacityPage({ searchParams }: CapacityPageProps) {
@@ -20,10 +26,20 @@ export default async function CapacityPage({ searchParams }: CapacityPageProps) 
   const roleFilter = params.role || "all";
   const showSearch = params.search === "true";
   const highlightMemberId = params.highlight || null;
+  const groupBy = params.groupBy || "role";
 
-  // Calculate week range
+  // Calculate week range with navigation support
   const today = new Date();
-  const weekStart = startOfWeek(today, { weekStartsOn: 1 });
+  const defaultWeekStart = startOfWeek(today, { weekStartsOn: 1 });
+
+  let weekStart = defaultWeekStart;
+  if (params.start) {
+    const parsed = new Date(params.start);
+    if (!isNaN(parsed.getTime())) {
+      weekStart = startOfWeek(parsed, { weekStartsOn: 1 });
+    }
+  }
+
   const weeks = Array.from({ length: numWeeks }, (_, i) => addWeeks(weekStart, i));
 
   // Fetch team members with their assignments for the date range
@@ -38,6 +54,7 @@ export default async function CapacityPage({ searchParams }: CapacityPageProps) 
         where: {
           startDate: { lte: weeks[weeks.length - 1] },
           endDate: { gte: weekStart },
+          project: { active: true },
         },
         include: {
           project: {
@@ -45,8 +62,15 @@ export default async function CapacityPage({ searchParams }: CapacityPageProps) 
               id: true,
               name: true,
               clientName: true,
+              color: true,
+              active: true,
             },
           },
+        },
+      },
+      teamMemberSkills: {
+        include: {
+          skill: { select: { id: true, name: true } },
         },
       },
     },
@@ -61,15 +85,25 @@ export default async function CapacityPage({ searchParams }: CapacityPageProps) 
   });
   const roles = allRoles.map((r: { role: string }) => r.role);
 
-  // Get unique skills for Who's Free search
-  const allSkills = await prisma.teamMember.findMany({
-    where: { workspaceId: session.user.workspaceId, active: true },
-    select: { skills: true },
-  });
-  const skills: string[] = Array.from(new Set(allSkills.flatMap((m: any) => m.skills)));
+  // Get unique skills for Who's Free search (legacy + workspace skills)
+  const [allSkillsRaw, workspaceSkills] = await Promise.all([
+    prisma.teamMember.findMany({
+      where: { workspaceId: session.user.workspaceId, active: true },
+      select: { skills: true },
+    }),
+    prisma.skill.findMany({
+      where: { workspaceId: session.user.workspaceId },
+      select: { id: true, name: true, category: true },
+      orderBy: [{ category: "asc" }, { name: "asc" }],
+    }),
+  ]);
+  // Use workspace skills if available, otherwise fall back to String[] skills
+  const skills: string[] = workspaceSkills.length > 0
+    ? workspaceSkills.map((s: { name: string }) => s.name)
+    : Array.from(new Set(allSkillsRaw.flatMap((m: any) => m.skills)));
 
-  // Get workspace settings for thresholds and check for demo data
-  const [workspace, hasDemoData] = await Promise.all([
+  // Get workspace settings and check for demo data
+  const [workspace, hasDemoData, activeProjectCount, activeProjects] = await Promise.all([
     prisma.workspace.findUnique({
       where: { id: session.user.workspaceId },
       select: {
@@ -77,14 +111,24 @@ export default async function CapacityPage({ searchParams }: CapacityPageProps) 
         criticalThreshold: true,
       },
     }),
-    // Check for demo data by looking for the demo team member "Sarah Chen"
     prisma.teamMember.findFirst({
       where: { workspaceId: session.user.workspaceId, name: "Sarah Chen" },
       select: { id: true },
     }),
+    prisma.project.count({
+      where: { workspaceId: session.user.workspaceId, active: true, status: "ACTIVE" },
+    }),
+    prisma.project.findMany({
+      where: { workspaceId: session.user.workspaceId, active: true, status: { in: ["ACTIVE", "PLANNED"] } },
+      select: { id: true, name: true, clientName: true, startDate: true, endDate: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
 
   const isOwner = session.user.role === "OWNER";
+
+  // Calculate stats for the stats panel
+  const totalCapacity = teamMembers.reduce((sum: number, m: any) => sum + m.defaultWeeklyCapacityHours, 0);
 
   return (
     <div className="space-y-6">
@@ -102,35 +146,33 @@ export default async function CapacityPage({ searchParams }: CapacityPageProps) 
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-        <Suspense
-          fallback={
-            <div className="flex items-center justify-center h-64">
-              <div className="animate-pulse text-slate-500">Loading capacity...</div>
-            </div>
-          }
-        >
-          <CapacityGrid
-            teamMembers={teamMembers}
-            weeks={weeks}
-            roles={roles}
-            currentRole={roleFilter}
-            currentWeeks={numWeeks}
-            highlightMemberId={highlightMemberId}
-            warningThreshold={workspace?.warningThreshold ?? 0.8}
-            criticalThreshold={workspace?.criticalThreshold ?? 0.95}
-          />
-        </Suspense>
-
-        <WhosFreePanel
+      <Suspense
+        fallback={
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-pulse text-slate-500">Loading capacity...</div>
+          </div>
+        }
+      >
+        <CapacityPageClient
           teamMembers={teamMembers}
           weeks={weeks}
           roles={roles}
           skills={skills}
-          initialOpen={showSearch}
+          workspaceSkills={workspaceSkills}
+          currentRole={roleFilter}
+          currentWeeks={numWeeks}
+          highlightMemberId={highlightMemberId}
+          warningThreshold={workspace?.warningThreshold ?? 0.8}
+          criticalThreshold={workspace?.criticalThreshold ?? 0.95}
+          weekStart={weekStart.toISOString()}
+          groupBy={groupBy}
+          showSearch={showSearch}
+          totalCapacity={totalCapacity}
+          activeProjectCount={activeProjectCount}
+          activeProjects={activeProjects}
+          isOwner={isOwner}
         />
-      </div>
+      </Suspense>
     </div>
   );
 }
-

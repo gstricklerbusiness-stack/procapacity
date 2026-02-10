@@ -12,6 +12,27 @@ export const PRESET_ROLES = [
   "Project Manager",
 ] as const;
 
+// Preset skills for marketing agencies
+export const PRESET_SKILLS = [
+  "Paid Media",
+  "SEO",
+  "Content Strategy",
+  "Social Media",
+  "Design",
+  "Development",
+  "Analytics",
+  "Copywriting",
+  "Email Marketing",
+  "PR & Communications",
+  "Video Production",
+  "UX/UI",
+  "Brand Strategy",
+  "PPC",
+  "CRO",
+] as const;
+
+export type PresetSkill = (typeof PRESET_SKILLS)[number];
+
 // Internal projects for non-billable time tracking
 export const INTERNAL_PROJECTS = [
   "Internal / Admin",
@@ -22,6 +43,35 @@ export const INTERNAL_PROJECTS = [
 
 export type PresetRole = (typeof PRESET_ROLES)[number];
 export type InternalProject = (typeof INTERNAL_PROJECTS)[number];
+
+// Project color palette for capacity grid
+const PROJECT_COLORS = [
+  "#3b82f6", // blue
+  "#8b5cf6", // violet
+  "#ec4899", // pink
+  "#f97316", // orange
+  "#14b8a6", // teal
+  "#eab308", // yellow
+  "#6366f1", // indigo
+  "#ef4444", // red
+  "#22c55e", // green
+  "#06b6d4", // cyan
+  "#d946ef", // fuchsia
+  "#f59e0b", // amber
+] as const;
+
+/**
+ * Generate a consistent color for a project based on its ID.
+ * Same project ID always returns the same color.
+ */
+export function getProjectColor(projectId: string): string {
+  let hash = 0;
+  for (let i = 0; i < projectId.length; i++) {
+    hash = (hash << 5) - hash + projectId.charCodeAt(i);
+    hash |= 0; // Convert to 32-bit int
+  }
+  return PROJECT_COLORS[Math.abs(hash) % PROJECT_COLORS.length];
+}
 
 // Default thresholds
 export const DEFAULT_WARNING_THRESHOLD = 0.8;

@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
 import { getTrialEndDate, DEFAULT_TRIAL_PLAN } from "@/lib/pricing";
 import { sendWelcomeEmail } from "@/lib/email";
+import { syncWorkspaceSeats, addUserWithSeatCheck } from "@/lib/seat-utils";
 
 export type ActionState = {
   error?: string;
@@ -45,7 +46,7 @@ export async function signUpAction(
 
   try {
     // Create workspace and user together with trial
-    await prisma.workspace.create({
+    const workspace = await prisma.workspace.create({
       data: {
         name: workspaceName,
         plan: DEFAULT_TRIAL_PLAN,
@@ -56,10 +57,14 @@ export async function signUpAction(
             email,
             passwordHash,
             role: "OWNER",
+            active: true,
           },
         },
       },
     });
+
+    // Sync seat count (sets currentSeats = 1 for the new workspace)
+    await syncWorkspaceSeats(workspace.id);
 
     // Send welcome email (don't block signup if it fails)
     try {
@@ -156,21 +161,18 @@ export async function acceptInviteAction(
   const passwordHash = await bcrypt.hash(password, 12);
 
   try {
-    // Create user and delete invite
-    await prisma.$transaction([
-      prisma.user.create({
-        data: {
-          name,
-          email: invite.email,
-          passwordHash,
-          role: invite.role,
-          workspaceId: invite.workspaceId,
-        },
-      }),
-      prisma.workspaceInvite.delete({
-        where: { id: invite.id },
-      }),
-    ]);
+    // Use transactional seat check to prevent race conditions
+    await addUserWithSeatCheck(invite.workspaceId, {
+      email: invite.email,
+      name,
+      passwordHash,
+      role: invite.role as "OWNER" | "MEMBER",
+    });
+
+    // Delete invite after successful user creation
+    await prisma.workspaceInvite.delete({
+      where: { id: invite.id },
+    });
 
     // Sign in the user
     await signIn("credentials", {
@@ -180,9 +182,13 @@ export async function acceptInviteAction(
     });
   } catch (error) {
     console.error("Accept invite error:", error);
-    return { error: "Failed to create account. Please try again." };
+    // Check if it's a seat limit error
+    const message =
+      error instanceof Error && error.message.includes("Seat limit")
+        ? error.message
+        : "Failed to create account. Please try again.";
+    return { error: message };
   }
 
   redirect("/");
 }
-

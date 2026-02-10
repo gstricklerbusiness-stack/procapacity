@@ -3,14 +3,14 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
 import {
-  STRIPE_PRICE_IDS,
   canDowngradeTo,
   PLANS,
+  PLAN_ORDER,
   type PlanId,
   type BillingPeriod,
 } from "@/lib/pricing";
-
-const PLAN_ORDER: PlanId[] = ["STARTER", "GROWTH", "SCALE"];
+import { calculateExtraSeats, getStripePriceIds } from "@/lib/seat-utils";
+import type Stripe from "stripe";
 
 export async function POST(request: NextRequest) {
   try {
@@ -33,12 +33,15 @@ export async function POST(request: NextRequest) {
     };
 
     // Validate plan and period
-    if (!["STARTER", "GROWTH", "SCALE"].includes(plan)) {
+    if (!PLAN_ORDER.includes(plan)) {
       return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
     }
 
     if (!["MONTHLY", "YEARLY"].includes(billingPeriod)) {
-      return NextResponse.json({ error: "Invalid billing period" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid billing period" },
+        { status: 400 }
+      );
     }
 
     const workspace = await prisma.workspace.findUnique({
@@ -47,19 +50,27 @@ export async function POST(request: NextRequest) {
         id: true,
         plan: true,
         billingPeriod: true,
+        currentSeats: true,
+        includedSeats: true,
         stripeSubscriptionId: true,
         stripeCustomerId: true,
+        stripeBaseItemId: true,
+        stripeSeatItemId: true,
         _count: {
           select: {
             teamMembers: { where: { active: true } },
             projects: { where: { active: true } },
+            users: { where: { active: true } },
           },
         },
       },
     });
 
     if (!workspace) {
-      return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Workspace not found" },
+        { status: 404 }
+      );
     }
 
     if (!workspace.stripeSubscriptionId) {
@@ -76,11 +87,12 @@ export async function POST(request: NextRequest) {
     const isDowngrade = newIndex < currentIndex;
     const isBillingPeriodChange = workspace.billingPeriod !== billingPeriod;
 
-    // Check if downgrade is allowed (within limits)
+    // Check if downgrade is allowed (team members, projects, AND seats)
     if (isDowngrade) {
       const { canDowngrade, reason } = canDowngradeTo(plan, {
         teamMembers: workspace._count.teamMembers,
         activeProjects: workspace._count.projects,
+        activeUsers: workspace._count.users,
       });
 
       if (!canDowngrade) {
@@ -88,17 +100,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Get price ID
-    const priceId =
-      billingPeriod === "YEARLY"
-        ? STRIPE_PRICE_IDS[plan].yearly
-        : STRIPE_PRICE_IDS[plan].monthly;
-
-    if (!priceId) {
-      return NextResponse.json(
-        { error: "Stripe price not configured for this plan" },
-        { status: 500 }
-      );
+    // Determine proration behavior
+    let prorationBehavior: "create_prorations" | "none" | "always_invoice";
+    if (isUpgrade) {
+      prorationBehavior = "always_invoice";
+    } else if (isDowngrade) {
+      prorationBehavior = "none";
+    } else if (isBillingPeriodChange) {
+      prorationBehavior = "always_invoice";
+    } else {
+      return NextResponse.json({
+        success: true,
+        message: "No changes needed",
+      });
     }
 
     const stripe = getStripe();
@@ -115,67 +129,82 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const subscriptionItemId = subscription.items.data[0]?.id;
-    if (!subscriptionItemId) {
+    // Identify existing items (handle both legacy single-item and new dual-item)
+    const baseItem =
+      subscription.items.data.find(
+        (i) => i.id === workspace.stripeBaseItemId
+      ) || subscription.items.data[0]; // fallback for legacy
+    const seatItem = workspace.stripeSeatItemId
+      ? subscription.items.data.find(
+          (i) => i.id === workspace.stripeSeatItemId
+        )
+      : null;
+
+    if (!baseItem) {
       return NextResponse.json(
         { error: "Subscription item not found" },
         { status: 400 }
       );
     }
 
-    // Determine proration behavior based on upgrade/downgrade
-    // Upgrades: Charge the prorated difference immediately, keep original billing date
-    // Downgrades: Don't charge extra, change takes effect at end of period
-    let prorationBehavior: "create_prorations" | "none" | "always_invoice";
-    const billingCycleAnchor: "unchanged" = "unchanged"; // Always keep original billing date
+    // Get new price IDs and calculate seat needs
+    const { basePriceId, seatPriceId } = getStripePriceIds(plan, billingPeriod);
+    const newPlanConfig = PLANS[plan];
+    const extraSeats = calculateExtraSeats(
+      workspace.currentSeats,
+      newPlanConfig.seatPricing.includedSeats
+    );
 
-    if (isUpgrade) {
-      // Upgrade: Charge prorated amount immediately using 'always_invoice'
-      // This creates and pays an invoice immediately for the proration
-      prorationBehavior = "always_invoice";
-    } else if (isDowngrade) {
-      // Downgrade: No extra charge, effective at end of billing period
-      // Using 'none' means the customer continues paying the old rate until renewal
-      prorationBehavior = "none";
-    } else if (isBillingPeriodChange) {
-      // Same plan but different billing period (monthly <-> yearly)
-      // Charge immediately for period changes
-      prorationBehavior = "always_invoice";
-    } else {
-      // No change
-      return NextResponse.json({ 
-        success: true, 
-        message: "No changes needed" 
+    // Build items array for subscription update
+    const items: Stripe.SubscriptionUpdateParams.Item[] = [
+      { id: baseItem.id, price: basePriceId, quantity: 1 },
+    ];
+
+    if (seatItem && extraSeats > 0) {
+      // Update existing seat item
+      items.push({
+        id: seatItem.id,
+        price: seatPriceId,
+        quantity: extraSeats,
       });
+    } else if (seatItem && extraSeats === 0) {
+      // Remove seat item (no extra seats on new plan)
+      items.push({ id: seatItem.id, deleted: true });
+    } else if (!seatItem && extraSeats > 0) {
+      // Add new seat item
+      items.push({ price: seatPriceId, quantity: extraSeats });
     }
+    // else: no seat item and no extra seats — nothing to add
 
     // Update the subscription
-    const updatedSubscription = await stripe.subscriptions.update(workspace.stripeSubscriptionId, {
-      items: [
-        {
-          id: subscriptionItemId,
-          price: priceId,
+    const updatedSubscription = await stripe.subscriptions.update(
+      workspace.stripeSubscriptionId,
+      {
+        items,
+        metadata: {
+          workspaceId: workspace.id,
+          plan,
+          billingPeriod,
+          includedSeats: String(newPlanConfig.seatPricing.includedSeats),
         },
-      ],
-      metadata: {
-        workspaceId: workspace.id,
-        plan,
-        billingPeriod,
-      },
-      proration_behavior: prorationBehavior,
-      billing_cycle_anchor: billingCycleAnchor,
-      payment_behavior: "error_if_incomplete", // Fail if payment doesn't go through
-    });
+        proration_behavior: prorationBehavior,
+        billing_cycle_anchor: "unchanged",
+        payment_behavior: "error_if_incomplete",
+      }
+    );
 
-    // For upgrades, if there's a pending invoice from the proration, pay it immediately
-    if ((isUpgrade || isBillingPeriodChange) && updatedSubscription.latest_invoice) {
-      const invoiceId = typeof updatedSubscription.latest_invoice === "string" 
-        ? updatedSubscription.latest_invoice 
-        : updatedSubscription.latest_invoice.id;
-      
+    // For upgrades, pay any pending proration invoice
+    if (
+      (isUpgrade || isBillingPeriodChange) &&
+      updatedSubscription.latest_invoice
+    ) {
+      const invoiceId =
+        typeof updatedSubscription.latest_invoice === "string"
+          ? updatedSubscription.latest_invoice
+          : updatedSubscription.latest_invoice.id;
+
       try {
         const invoice = await stripe.invoices.retrieve(invoiceId);
-        // Only pay if the invoice is open/draft and has a positive amount
         if (invoice.status === "open" || invoice.status === "draft") {
           if (invoice.status === "draft") {
             await stripe.invoices.finalizeInvoice(invoiceId);
@@ -184,27 +213,39 @@ export async function POST(request: NextRequest) {
         }
       } catch (invoiceError) {
         console.error("Error paying proration invoice:", invoiceError);
-        // Don't fail the whole operation if invoice payment fails
-        // Stripe will retry automatically
       }
     }
 
+    // Extract updated item IDs
+    const updatedBaseItem = updatedSubscription.items.data.find(
+      (i) => i.price.id === basePriceId
+    );
+    const updatedSeatItem = updatedSubscription.items.data.find(
+      (i) => i.price.id === seatPriceId
+    );
+
     // Update workspace in database
-    // For downgrades, we update immediately in DB but Stripe handles the actual billing change
     await prisma.workspace.update({
       where: { id: workspace.id },
       data: {
         plan,
         billingPeriod,
+        includedSeats: newPlanConfig.seatPricing.includedSeats,
+        stripeBaseItemId: updatedBaseItem?.id ?? workspace.stripeBaseItemId,
+        stripeSeatItemId: updatedSeatItem?.id ?? null,
       },
     });
 
-    const changeType = isUpgrade ? "upgraded" : isDowngrade ? "downgraded" : "updated";
-    const effectiveMessage = isDowngrade 
+    const changeType = isUpgrade
+      ? "upgraded"
+      : isDowngrade
+        ? "downgraded"
+        : "updated";
+    const effectiveMessage = isDowngrade
       ? `Your plan has been ${changeType} to ${PLANS[plan].name}. The new rate will take effect at your next billing date.`
       : `Your plan has been ${changeType} to ${PLANS[plan].name}.`;
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
       message: effectiveMessage,
       changeType,

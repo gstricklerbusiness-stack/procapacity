@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
-import { STRIPE_PRICE_IDS, type PlanId, type BillingPeriod } from "@/lib/pricing";
+import { PLANS, PLAN_ORDER, type PlanId, type BillingPeriod } from "@/lib/pricing";
+import {
+  getCurrentSeats,
+  calculateExtraSeats,
+  getStripePriceIds,
+} from "@/lib/seat-utils";
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,12 +30,15 @@ export async function POST(request: NextRequest) {
     };
 
     // Validate plan and period
-    if (!["STARTER", "GROWTH", "SCALE"].includes(plan)) {
+    if (!PLAN_ORDER.includes(plan)) {
       return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
     }
 
     if (!["MONTHLY", "YEARLY"].includes(billingPeriod)) {
-      return NextResponse.json({ error: "Invalid billing period" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid billing period" },
+        { status: 400 }
+      );
     }
 
     const workspace = await prisma.workspace.findUnique({
@@ -44,7 +52,10 @@ export async function POST(request: NextRequest) {
     });
 
     if (!workspace) {
-      return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Workspace not found" },
+        { status: 404 }
+      );
     }
 
     // If already subscribed, redirect to change-plan instead
@@ -59,7 +70,6 @@ export async function POST(request: NextRequest) {
     let customerId = workspace.stripeCustomerId;
 
     if (!customerId) {
-      // Create new Stripe customer
       const customer = await stripe.customers.create({
         email: session.user.email,
         name: workspace.name,
@@ -71,49 +81,59 @@ export async function POST(request: NextRequest) {
 
       customerId = customer.id;
 
-      // Save customer ID
       await prisma.workspace.update({
         where: { id: workspace.id },
         data: { stripeCustomerId: customerId },
       });
     }
 
-    // Get price ID
-    const priceId =
-      billingPeriod === "YEARLY"
-        ? STRIPE_PRICE_IDS[plan].yearly
-        : STRIPE_PRICE_IDS[plan].monthly;
+    // Get Stripe price IDs for base + seat
+    const { basePriceId, seatPriceId } = getStripePriceIds(plan, billingPeriod);
+    const planConfig = PLANS[plan];
+    const currentSeats = await getCurrentSeats(workspace.id);
+    const extraSeats = calculateExtraSeats(
+      currentSeats,
+      planConfig.seatPricing.includedSeats
+    );
 
-    if (!priceId) {
-      return NextResponse.json(
-        { error: "Stripe price not configured for this plan" },
-        { status: 500 }
-      );
+    // Build line items: always include base, include seat item if extra > 0.
+    // Note: Stripe Checkout requires quantity >= 1, so we can't send a seat
+    // item with quantity 0 here. The webhook (handleCheckoutCompleted) will
+    // create a seat subscription item with quantity 0 after checkout if needed,
+    // ensuring the subscription always has both items for future seat updates.
+    const line_items: Array<{ price: string; quantity: number }> = [
+      { price: basePriceId, quantity: 1 },
+    ];
+
+    if (extraSeats > 0) {
+      line_items.push({ price: seatPriceId, quantity: extraSeats });
     }
 
-    // Create checkout session for new subscription
+    console.log(
+      `[Checkout] plan=${plan} period=${billingPeriod} seats=${currentSeats} included=${planConfig.seatPricing.includedSeats} extra=${extraSeats} lineItems=${line_items.length}`
+    );
+
+    // Create checkout session
     const checkoutSession = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: "subscription",
       payment_method_types: ["card"],
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
-        },
-      ],
+      line_items,
       success_url: `${process.env.NEXT_PUBLIC_APP_URL}/settings/billing?success=true`,
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/settings/billing?canceled=true`,
       metadata: {
         workspaceId: workspace.id,
         plan,
         billingPeriod,
+        includedSeats: String(planConfig.seatPricing.includedSeats),
+        currentSeats: String(currentSeats),
       },
       subscription_data: {
         metadata: {
           workspaceId: workspace.id,
           plan,
           billingPeriod,
+          includedSeats: String(planConfig.seatPricing.includedSeats),
         },
       },
     });

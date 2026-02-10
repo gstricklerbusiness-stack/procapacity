@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { TeamMember, Assignment } from "@prisma/client";
+import { TeamMember, Assignment, SkillProficiency } from "@prisma/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ import { startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
 import Link from "next/link";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { ProgressBar } from "@/components/ui/progress-bar";
+import { PROFICIENCY_LABELS } from "@/lib/seed-skills";
 
 interface AssignmentWithProject extends Assignment {
   project: {
@@ -28,14 +29,29 @@ interface AssignmentWithProject extends Assignment {
   };
 }
 
+interface TeamMemberSkillEntry {
+  skillId: string;
+  proficiency: SkillProficiency;
+  skill: { id: string; name: string };
+}
+
 interface TeamMemberWithAssignments extends TeamMember {
   assignments: AssignmentWithProject[];
+  teamMemberSkills?: TeamMemberSkillEntry[];
+}
+
+interface WorkspaceSkill {
+  id: string;
+  name: string;
+  category: string;
 }
 
 interface WhosFreeResultItem {
   member: TeamMemberWithAssignments;
   freeHoursPerWeek: number;
   avgUtilization: number;
+  skillMatch?: { skillName: string; proficiency: SkillProficiency } | null;
+  skillRank: number; // 0=no match filter, 3=EXPERT, 2=PROFICIENT, 1=BEGINNER
 }
 
 interface WhosFreeePanelProps {
@@ -43,14 +59,23 @@ interface WhosFreeePanelProps {
   weeks: Date[];
   roles: string[];
   skills: string[];
+  workspaceSkills?: WorkspaceSkill[];
   initialOpen?: boolean;
 }
+
+// Higher rank = better skill match
+const PROFICIENCY_RANK: Record<SkillProficiency, number> = {
+  EXPERT: 3,
+  PROFICIENT: 2,
+  BEGINNER: 1,
+};
 
 export function WhosFreePanel({
   teamMembers,
   weeks,
   roles,
   skills,
+  workspaceSkills = [],
   initialOpen = false,
 }: WhosFreeePanelProps) {
   const [isExpanded, setIsExpanded] = useState(initialOpen);
@@ -58,6 +83,11 @@ export function WhosFreePanel({
   const [selectedSkill, setSelectedSkill] = useState<string>("all");
   const [requiredHours, setRequiredHours] = useState<string>("10");
   const [weekRange, setWeekRange] = useState<string>("1");
+
+  // Use workspace skills for the dropdown if available, else fall back to string skills
+  const skillOptions = workspaceSkills.length > 0
+    ? workspaceSkills.map((s) => s.name)
+    : skills;
 
   // Calculate available team members based on filters
   const results = useMemo<WhosFreeResultItem[]>(() => {
@@ -71,29 +101,35 @@ export function WhosFreePanel({
         if (selectedRole !== "all" && member.role !== selectedRole) {
           return false;
         }
-        // Filter by skill
-        if (selectedSkill !== "all" && !member.skills.includes(selectedSkill)) {
-          return false;
+        // Filter by skill -- check both join table and legacy String[]
+        if (selectedSkill !== "all") {
+          const hasSkillInJoinTable = member.teamMemberSkills?.some(
+            (tms: TeamMemberSkillEntry) => tms.skill.name === selectedSkill
+          );
+          const hasSkillInLegacy = member.skills.includes(selectedSkill);
+          if (!hasSkillInJoinTable && !hasSkillInLegacy) {
+            return false;
+          }
         }
         return true;
       })
       .map((member) => {
         // Calculate free hours for each week in range
         const weeklyFreeHours = weeksInRange.map((week) => {
-          const weekStart = startOfWeek(week, { weekStartsOn: 1 });
-          const weekEnd = endOfWeek(week, { weekStartsOn: 1 });
+          const wStart = startOfWeek(week, { weekStartsOn: 1 });
+          const wEnd = endOfWeek(week, { weekStartsOn: 1 });
           
           const assignedHours = member.assignments
-            .filter((a) => {
-              return isWithinInterval(weekStart, {
+            .filter((a: AssignmentWithProject) => {
+              return isWithinInterval(wStart, {
                 start: a.startDate,
                 end: a.endDate,
               }) || isWithinInterval(a.startDate, {
-                start: weekStart,
-                end: weekEnd,
+                start: wStart,
+                end: wEnd,
               });
             })
-            .reduce((sum, a) => sum + a.hoursPerWeek, 0);
+            .reduce((sum: number, a: AssignmentWithProject) => sum + a.hoursPerWeek, 0);
 
           return member.defaultWeeklyCapacityHours - assignedHours;
         });
@@ -106,14 +142,41 @@ export function WhosFreePanel({
             return sum + used / member.defaultWeeklyCapacityHours;
           }, 0) / weeklyFreeHours.length;
 
+        // Calculate skill match and proficiency rank
+        let skillMatch: { skillName: string; proficiency: SkillProficiency } | null = null;
+        let skillRank = 0;
+
+        if (selectedSkill !== "all") {
+          // Check join table first for proficiency info
+          const tms = member.teamMemberSkills?.find(
+            (ts: TeamMemberSkillEntry) => ts.skill.name === selectedSkill
+          );
+          if (tms) {
+            skillMatch = { skillName: selectedSkill, proficiency: tms.proficiency };
+            skillRank = PROFICIENCY_RANK[tms.proficiency];
+          } else if (member.skills.includes(selectedSkill)) {
+            // Legacy fallback -- assume PROFICIENT
+            skillMatch = { skillName: selectedSkill, proficiency: "PROFICIENT" };
+            skillRank = PROFICIENCY_RANK.PROFICIENT;
+          }
+        }
+
         return {
           member,
           freeHoursPerWeek: Math.max(0, minFreeHours),
           avgUtilization,
+          skillMatch,
+          skillRank,
         };
       })
       .filter((result) => result.freeHoursPerWeek >= hoursNeeded)
-      .sort((a, b) => b.freeHoursPerWeek - a.freeHoursPerWeek);
+      .sort((a, b) => {
+        // Sort by skill rank first (experts first), then by free hours
+        if (selectedSkill !== "all" && a.skillRank !== b.skillRank) {
+          return b.skillRank - a.skillRank;
+        }
+        return b.freeHoursPerWeek - a.freeHoursPerWeek;
+      });
   }, [teamMembers, weeks, selectedRole, selectedSkill, requiredHours, weekRange]);
 
   return (
@@ -173,7 +236,7 @@ export function WhosFreePanel({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Any skill</SelectItem>
-                  {skills.map((skill) => (
+                  {skillOptions.map((skill) => (
                     <SelectItem key={skill} value={skill}>
                       {skill}
                     </SelectItem>
@@ -269,8 +332,27 @@ export function WhosFreePanel({
                             animate={false}
                           />
                         </div>
+
+                        {/* Skill match badge */}
+                        {result.skillMatch && (
+                          <div className="mt-2">
+                            <Badge
+                              variant="secondary"
+                              className={`text-[10px] px-2 py-0.5 gap-1 ${
+                                result.skillMatch.proficiency === "EXPERT"
+                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                                  : result.skillMatch.proficiency === "PROFICIENT"
+                                  ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                                  : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                              }`}
+                            >
+                              <Sparkles className="h-3 w-3" />
+                              {result.skillMatch.skillName} ({PROFICIENCY_LABELS[result.skillMatch.proficiency]?.label || result.skillMatch.proficiency})
+                            </Badge>
+                          </div>
+                        )}
                         
-                        {result.member.skills.length > 0 && (
+                        {!result.skillMatch && result.member.skills.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-2">
                             {result.member.skills.slice(0, 2).map((skill) => (
                               <Badge
@@ -313,4 +395,3 @@ export function WhosFreePanel({
     </Card>
   );
 }
-

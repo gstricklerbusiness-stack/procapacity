@@ -2,13 +2,20 @@
 
 import { useState } from "react";
 import { Check } from "lucide-react";
-import { PLANS, formatPrice, getYearlySavings } from "@/lib/pricing";
+import {
+  PLANS,
+  PLAN_ORDER,
+  formatPrice,
+  getYearlySavings,
+} from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 
 export function PricingCards() {
-  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
+  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">(
+    "monthly"
+  );
 
-  const plans = Object.values(PLANS);
+  const plans = PLAN_ORDER.map((id) => PLANS[id]);
 
   return (
     <div className="container mx-auto px-4">
@@ -44,9 +51,13 @@ export function PricingCards() {
       </div>
 
       {/* Plan cards */}
-      <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
         {plans.map((plan) => {
-          const price = billingPeriod === "yearly" ? plan.pricing.yearly : plan.pricing.monthly;
+          const sp = plan.seatPricing;
+          const basePrice =
+            billingPeriod === "yearly" ? sp.baseYearly : sp.baseMonthly;
+          const perSeat =
+            billingPeriod === "yearly" ? sp.perSeatYearly : sp.perSeatMonthly;
           const savings = getYearlySavings(plan.id);
           const isHighlighted = plan.highlighted;
 
@@ -82,12 +93,16 @@ export function PricingCards() {
               <div className="mt-6">
                 <div className="flex items-baseline">
                   <span className="text-4xl font-bold text-slate-900 dark:text-white">
-                    {formatPrice(price)}
+                    {formatPrice(basePrice)}
                   </span>
                   <span className="ml-1 text-slate-500 dark:text-slate-400">
                     /{billingPeriod === "yearly" ? "year" : "month"}
                   </span>
                 </div>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  Includes {sp.includedSeats} seats, then{" "}
+                  {formatPrice(perSeat)}/seat
+                </p>
                 {billingPeriod === "yearly" && (
                   <p className="mt-1 text-sm text-emerald-600 dark:text-emerald-400">
                     Save {formatPrice(savings)} per year
@@ -128,9 +143,9 @@ export function PricingCards() {
                 <div className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
                   <p>
                     <span className="font-medium text-slate-900 dark:text-white">
-                      {plan.limits.teamMembers}
+                      {sp.maxSeats}
                     </span>{" "}
-                    team members
+                    max seats
                   </p>
                   <p>
                     <span className="font-medium text-slate-900 dark:text-white">
@@ -153,7 +168,7 @@ export function PricingCards() {
 
       {/* Contact for larger teams */}
       <p className="mt-12 text-center text-sm text-slate-500 dark:text-slate-400">
-        Need more than 60 team members?{" "}
+        Need more than 200 users?{" "}
         <a
           href="mailto:sales@procapacity.com"
           className="text-emerald-600 dark:text-emerald-400 hover:underline font-medium"
@@ -164,4 +179,3 @@ export function PricingCards() {
     </div>
   );
 }
-

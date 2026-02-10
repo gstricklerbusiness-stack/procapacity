@@ -24,15 +24,30 @@ model Workspace {
   stripeSubscriptionId String?           @unique @map("stripe_subscription_id")
   subscribedAt         DateTime?         @map("subscribed_at")
   
+  // Seat-based billing
+  currentSeats         Int               @default(0) @map("current_seats")
+  includedSeats        Int               @default(30) @map("included_seats")
+  stripeBaseItemId     String?           @map("stripe_base_item_id")
+  stripeSeatItemId     String?           @map("stripe_seat_item_id")
+  
   createdAt            DateTime          @default(now()) @map("created_at")
   updatedAt            DateTime          @updatedAt @map("updated_at")
   
+  // Industry
+  industry             IndustryVertical? @map("industry")
+  
+  // Branding
+  logoUrl              String?           @map("logo_url")
+  
   // Relations
+  activityLogs         ActivityLog[]
   assignments          Assignment[]
   projects             Project[]
+  skills               Skill[]
   teamMembers          TeamMember[]
   users                User[]
   invites              WorkspaceInvite[]
+  teamImports          TeamImport[]
 
   @@map("workspaces")
 }
@@ -41,6 +56,7 @@ enum PlanType {
   STARTER
   GROWTH
   SCALE
+  ENTERPRISE
 }
 
 enum BillingPeriod {
@@ -56,12 +72,55 @@ enum UserRole {
 enum ProjectType {
   PROJECT
   RETAINER
+  CAMPAIGN
+  AUDIT
 }
 
 enum ProjectStatus {
   PLANNED
   ACTIVE
+  ON_HOLD
   COMPLETED
+  ARCHIVED
+}
+
+enum BillingCycle {
+  WEEKLY
+  MONTHLY
+}
+
+enum ImportStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  PARTIAL
+}
+
+enum SkillCategory {
+  CREATIVE
+  DIGITAL_PAID
+  STRATEGY
+  DEVELOPMENT
+  LEGAL
+  FINANCE
+  CONSULTING
+  GENERAL
+  CUSTOM
+}
+
+enum SkillProficiency {
+  BEGINNER
+  PROFICIENT
+  EXPERT
+}
+
+enum IndustryVertical {
+  MARKETING_AGENCY
+  LAW_FIRM
+  DESIGN_STUDIO
+  CONSULTANCY
+  ARCHITECTURE
+  CUSTOM
 }
 
 model User {
@@ -70,6 +129,7 @@ model User {
   name                 String?
   passwordHash         String      @map("password_hash")
   role                 UserRole    @default(MEMBER)
+  active               Boolean     @default(true)
   emailVerified        DateTime?   @map("email_verified")
   image                String?
   passwordResetToken   String?     @unique @map("password_reset_token")
@@ -79,7 +139,10 @@ model User {
   workspaceId          String      @map("workspace_id")
   teamMemberId         String?     @unique @map("team_member_id")
   accounts             Account[]
+  activityLogs         ActivityLog[]
   sessions             Session[]
+  teamImports          TeamImport[]
+  ownedProjects        Project[]   @relation("ProjectOwner")
   teamMember           TeamMember? @relation(fields: [teamMemberId], references: [id])
   workspace            Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -138,48 +201,122 @@ model TeamMember {
   active                     Boolean      @default(true)
   createdAt                  DateTime     @default(now()) @map("created_at")
   updatedAt                  DateTime     @updatedAt @map("updated_at")
-  workspaceId                String       @map("workspace_id")
+  workspaceId                String            @map("workspace_id")
   assignments                Assignment[]
-  workspace                  Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  teamMemberSkills           TeamMemberSkill[]
+  workspace                  Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user                       User?
 
   @@map("team_members")
 }
 
 model Project {
-  id          String        @id @default(cuid())
-  name        String
-  clientName  String?       @map("client_name")
-  type        ProjectType   @default(PROJECT)
-  status      ProjectStatus @default(PLANNED)
-  startDate   DateTime      @map("start_date") @db.Date
-  endDate     DateTime?     @map("end_date") @db.Date
-  notes       String?
-  active      Boolean       @default(true)
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
-  workspaceId String        @map("workspace_id")
-  assignments Assignment[]
-  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id               String        @id @default(cuid())
+  name             String
+  clientName       String?       @map("client_name")
+  type             ProjectType   @default(PROJECT)
+  status           ProjectStatus @default(PLANNED)
+  startDate        DateTime      @map("start_date") @db.Date
+  endDate          DateTime?     @map("end_date") @db.Date
+  totalBudgetHours Int?          @map("total_budget_hours")
+  billingCycle     BillingCycle? @map("billing_cycle")
+  requiredSkills   String[]      @map("required_skills")
+  color            String?
+  notes            String?
+  active           Boolean       @default(true)
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+  workspaceId      String        @map("workspace_id")
+  ownerId          String?       @map("owner_id")
+  activityLogs     ActivityLog[]
+  assignments      Assignment[]
+  owner            User?         @relation("ProjectOwner", fields: [ownerId], references: [id])
+  workspace        Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@map("projects")
 }
 
 model Assignment {
-  id           String     @id @default(cuid())
-  startDate    DateTime   @map("start_date") @db.Date
-  endDate      DateTime   @map("end_date") @db.Date
-  hoursPerWeek Int        @map("hours_per_week")
-  billable     Boolean    @default(true)
-  notes        String?
-  createdAt    DateTime   @default(now()) @map("created_at")
-  updatedAt    DateTime   @updatedAt @map("updated_at")
-  workspaceId  String     @map("workspace_id")
-  projectId    String     @map("project_id")
-  teamMemberId String     @map("team_member_id")
-  project      Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  teamMember   TeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
-  workspace    Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id            String     @id @default(cuid())
+  startDate     DateTime   @map("start_date") @db.Date
+  endDate       DateTime   @map("end_date") @db.Date
+  hoursPerWeek  Float      @map("hours_per_week")
+  billable      Boolean    @default(true)
+  roleOnProject String?    @map("role_on_project")
+  notes         String?
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+  workspaceId   String     @map("workspace_id")
+  projectId     String     @map("project_id")
+  teamMemberId  String     @map("team_member_id")
+  project       Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  teamMember    TeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+  workspace     Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@map("assignments")
+}
+
+model Skill {
+  id               String            @id @default(cuid())
+  name             String
+  category         SkillCategory     @default(GENERAL)
+  description      String?
+  isPreset         Boolean           @default(false) @map("is_preset")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  workspaceId      String            @map("workspace_id")
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  teamMemberSkills TeamMemberSkill[]
+
+  @@unique([workspaceId, name])
+  @@map("skills")
+}
+
+model TeamMemberSkill {
+  id           String           @id @default(cuid())
+  proficiency  SkillProficiency @default(PROFICIENT)
+  createdAt    DateTime         @default(now()) @map("created_at")
+  teamMemberId String           @map("team_member_id")
+  skillId      String           @map("skill_id")
+  teamMember   TeamMember       @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+  skill        Skill            @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([teamMemberId, skillId])
+  @@map("team_member_skills")
+}
+
+model TeamImport {
+  id           String       @id @default(cuid())
+  fileName     String       @map("file_name")
+  totalRows    Int          @map("total_rows")
+  validRows    Int          @map("valid_rows")
+  importedRows Int          @map("imported_rows")
+  skippedRows  Int          @default(0) @map("skipped_rows")
+  status       ImportStatus @default(PENDING)
+  errorSummary Json?        @map("error_summary")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  workspaceId  String       @map("workspace_id")
+  userId       String       @map("user_id")
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("team_imports")
+}
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  action      String   // e.g. "project.created", "assignment.created"
+  details     Json?    // Additional data about the action
+  workspaceId String   @map("workspace_id")
+  projectId   String?  @map("project_id")
+  userId      String   @map("user_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project     Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@index([projectId, createdAt])
+  @@map("activity_logs")
 }

@@ -30,8 +30,8 @@ import {
   ActionState,
 } from "@/app/actions/assignments";
 import { toast } from "sonner";
-import { format } from "date-fns";
-import { AlertTriangle } from "lucide-react";
+import { format, startOfWeek, nextMonday, previousMonday, isMonday } from "date-fns";
+import { AlertTriangle, Plus } from "lucide-react";
 
 interface AssignmentWithTeamMember extends Assignment {
   teamMember: TeamMember;
@@ -46,6 +46,15 @@ interface AssignmentModalProps {
 }
 
 const initialState: ActionState = {};
+
+function snapToMonday(dateStr: string): string {
+  if (!dateStr) return dateStr;
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return dateStr;
+  if (isMonday(date)) return dateStr;
+  const monday = previousMonday(date);
+  return format(monday, "yyyy-MM-dd");
+}
 
 export function AssignmentModal({
   mode,
@@ -68,27 +77,54 @@ export function AssignmentModal({
   const [hoursPerWeek, setHoursPerWeek] = useState(
     assignment?.hoursPerWeek?.toString() || "20"
   );
+  const [roleOnProject, setRoleOnProject] = useState(
+    (assignment as any)?.roleOnProject || ""
+  );
   const [overAllocationWarning, setOverAllocationWarning] = useState<{
     isOverAllocated: boolean;
     maxUtilization: number;
     affectedWeeks: { weekStart: Date; utilization: number; totalHours: number }[];
   } | null>(null);
   const [isCheckingAllocation, setIsCheckingAllocation] = useState(false);
+  const [addAnother, setAddAnother] = useState(false);
 
   const action = mode === "create" ? createAssignment : updateAssignment;
   const [state, formAction, isPending] = useActionState(action, initialState);
 
   useEffect(() => {
     if (state.success) {
-      setOpen(false);
-      toast.success(
-        mode === "create" ? "Assignment created" : "Assignment updated"
-      );
+      if (addAnother && mode === "create") {
+        // Reset form for another assignment
+        setSelectedMemberId("");
+        setHoursPerWeek("20");
+        setRoleOnProject("");
+        setOverAllocationWarning(null);
+        toast.success("Assignment created. Add another!");
+      } else {
+        setOpen(false);
+        toast.success(
+          mode === "create" ? "Assignment created" : "Assignment updated"
+        );
+      }
     }
     if (state.error) {
       toast.error(state.error);
     }
-  }, [state, mode]);
+  }, [state, mode, addAnother]);
+
+  // Snap dates to Monday on blur
+  const handleStartDateBlur = () => {
+    if (startDate) {
+      setStartDate(snapToMonday(startDate));
+    }
+  };
+  const handleEndDateBlur = () => {
+    if (endDate) {
+      // Snap end date to the following Friday (end of week) approximation
+      // Actually just snap to Monday for consistency
+      setEndDate(snapToMonday(endDate));
+    }
+  };
 
   // Check over-allocation when relevant fields change
   const checkAllocation = useCallback(async () => {
@@ -103,7 +139,7 @@ export function AssignmentModal({
         selectedMemberId,
         new Date(startDate),
         new Date(endDate),
-        parseInt(hoursPerWeek),
+        parseFloat(hoursPerWeek),
         mode === "edit" ? assignment?.id : undefined
       );
       setOverAllocationWarning(result);
@@ -120,6 +156,20 @@ export function AssignmentModal({
   }, [checkAllocation]);
 
   const selectedMember = teamMembers.find((m) => m.id === selectedMemberId);
+
+  // Calculate live utilization preview
+  const liveUtilization = (() => {
+    if (!selectedMember || !hoursPerWeek) return null;
+    const hours = parseFloat(hoursPerWeek);
+    if (isNaN(hours)) return null;
+    // This is a simplified preview - just shows what % this assignment alone is
+    const impactPct = (hours / selectedMember.defaultWeeklyCapacityHours) * 100;
+    return {
+      hours,
+      capacity: selectedMember.defaultWeeklyCapacityHours,
+      impactPct: Math.round(impactPct),
+    };
+  })();
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -142,6 +192,7 @@ export function AssignmentModal({
           )}
           <input type="hidden" name="projectId" value={projectId} />
           <input type="hidden" name="billable" value={billable.toString()} />
+          <input type="hidden" name="roleOnProject" value={roleOnProject} />
 
           <div className="space-y-4">
             {/* Team Member */}
@@ -163,7 +214,7 @@ export function AssignmentModal({
                         <div className="flex flex-col">
                           <span>{member.name}</span>
                           <span className="text-xs text-slate-500">
-                            {member.role} • {member.defaultWeeklyCapacityHours}h/week
+                            {member.role} &bull; {member.defaultWeeklyCapacityHours}h/week
                           </span>
                         </div>
                       </SelectItem>
@@ -187,6 +238,17 @@ export function AssignmentModal({
               )}
             </div>
 
+            {/* Role on Project */}
+            <div className="space-y-2">
+              <Label htmlFor="roleOnProject">Role on this project</Label>
+              <Input
+                id="roleOnProject"
+                value={roleOnProject}
+                onChange={(e) => setRoleOnProject(e.target.value)}
+                placeholder="e.g. Lead Designer, Strategy Lead"
+              />
+            </div>
+
             {/* Dates */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -197,8 +259,10 @@ export function AssignmentModal({
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
+                  onBlur={handleStartDateBlur}
                   required
                 />
+                <p className="text-[10px] text-slate-400">Snaps to Monday</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="endDate">End date *</Label>
@@ -208,8 +272,10 @@ export function AssignmentModal({
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
+                  onBlur={handleEndDateBlur}
                   required
                 />
+                <p className="text-[10px] text-slate-400">Snaps to Monday</p>
               </div>
             </div>
 
@@ -220,16 +286,17 @@ export function AssignmentModal({
                 id="hoursPerWeek"
                 name="hoursPerWeek"
                 type="number"
-                min="1"
+                min="0.5"
                 max="168"
+                step="0.5"
                 value={hoursPerWeek}
                 onChange={(e) => setHoursPerWeek(e.target.value)}
                 required
               />
-              {selectedMember && (
+              {liveUtilization && (
                 <p className="text-xs text-slate-500">
-                  {selectedMember.name}&apos;s weekly capacity:{" "}
-                  {selectedMember.defaultWeeklyCapacityHours}h
+                  {liveUtilization.hours}h of {liveUtilization.capacity}h capacity ({liveUtilization.impactPct}% of{" "}
+                  {selectedMember?.name}&apos;s time)
                 </p>
               )}
             </div>
@@ -259,10 +326,17 @@ export function AssignmentModal({
               </div>
             )}
 
+            {overAllocationWarning && !overAllocationWarning.isOverAllocated && selectedMember && (
+              <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                <p className="text-sm text-emerald-700 dark:text-emerald-300">
+                  Peak utilization: {Math.round(overAllocationWarning.maxUtilization * 100)}% &mdash;{" "}
+                  {selectedMember.name} has capacity for this assignment.
+                </p>
+              </div>
+            )}
+
             {isCheckingAllocation && (
-              <p className="text-xs text-slate-500">
-                Checking capacity...
-              </p>
+              <p className="text-xs text-slate-500">Checking capacity...</p>
             )}
 
             {/* Billable toggle */}
@@ -295,7 +369,7 @@ export function AssignmentModal({
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button
               type="button"
               variant="outline"
@@ -304,9 +378,22 @@ export function AssignmentModal({
             >
               Cancel
             </Button>
+            {mode === "create" && (
+              <Button
+                type="submit"
+                variant="outline"
+                disabled={isPending}
+                onClick={() => setAddAnother(true)}
+                className="gap-1"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                {isPending ? "Adding..." : "Assign & Add Another"}
+              </Button>
+            )}
             <Button
               type="submit"
               disabled={isPending}
+              onClick={() => setAddAnother(false)}
               className={
                 overAllocationWarning?.isOverAllocated
                   ? "bg-amber-600 hover:bg-amber-500"
@@ -329,4 +416,3 @@ export function AssignmentModal({
     </Dialog>
   );
 }
-

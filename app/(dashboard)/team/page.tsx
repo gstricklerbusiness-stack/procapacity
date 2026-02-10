@@ -2,11 +2,13 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { TeamTable } from "@/components/team-table";
-import { TeamMemberModal } from "@/components/team-member-modal";
+import { AddTeamMemberButton } from "@/components/team/add-team-member-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Users, TrendingUp, AlertTriangle } from "lucide-react";
+import { Users, TrendingUp, AlertTriangle, Upload } from "lucide-react";
+import Link from "next/link";
 import { startOfWeek, addWeeks } from "date-fns";
+import { PLANS, type PlanId } from "@/lib/pricing";
 
 export default async function TeamPage() {
   const session = await auth();
@@ -16,18 +18,36 @@ export default async function TeamPage() {
   const weekStart = startOfWeek(today, { weekStartsOn: 1 });
   const weekEnd = addWeeks(weekStart, 1);
 
-  const teamMembers = await prisma.teamMember.findMany({
-    where: { workspaceId: session.user.workspaceId },
-    orderBy: [{ active: "desc" }, { name: "asc" }],
-    include: {
-      assignments: {
-        where: {
-          startDate: { lte: weekEnd },
-          endDate: { gte: weekStart },
+  const [teamMembers, workspaceSkills, workspace] = await Promise.all([
+    prisma.teamMember.findMany({
+      where: { workspaceId: session.user.workspaceId },
+      orderBy: [{ active: "desc" }, { name: "asc" }],
+      include: {
+        assignments: {
+          where: {
+            startDate: { lte: weekEnd },
+            endDate: { gte: weekStart },
+            project: { active: true },
+          },
+        },
+        teamMemberSkills: {
+          include: { skill: { select: { id: true, name: true } } },
         },
       },
-    },
-  });
+    }),
+    prisma.skill.findMany({
+      where: { workspaceId: session.user.workspaceId },
+      select: { id: true, name: true, category: true },
+      orderBy: [{ category: "asc" }, { name: "asc" }],
+    }),
+    prisma.workspace.findUnique({
+      where: { id: session.user.workspaceId },
+      select: { plan: true },
+    }),
+  ]);
+
+  const currentPlan = (workspace?.plan ?? "STARTER") as PlanId;
+  const planLimits = PLANS[currentPlan].limits;
 
   const isOwner = session.user.role === "OWNER";
 
@@ -80,12 +100,20 @@ export default async function TeamPage() {
           </p>
         </div>
         {isOwner && (
-          <TeamMemberModal mode="create">
-            <Button className="bg-emerald-600 hover:bg-emerald-500">
-              <Plus className="h-4 w-4 mr-2" />
-              Add team member
-            </Button>
-          </TeamMemberModal>
+          <div className="flex items-center gap-2">
+            <AddTeamMemberButton
+              workspaceSkills={workspaceSkills}
+              currentPlan={currentPlan}
+              teamMemberCount={activeMembers.length}
+              teamMemberLimit={planLimits.teamMembers}
+            />
+            <Link href="/team/import">
+              <Button variant="outline">
+                <Upload className="h-4 w-4 mr-2" />
+                Import Team
+              </Button>
+            </Link>
+          </div>
         )}
       </div>
 
@@ -187,6 +215,7 @@ export default async function TeamPage() {
         teamMembers={teamMembers} 
         isOwner={isOwner} 
         utilizationMap={utilizationMap}
+        workspaceSkills={workspaceSkills}
       />
     </div>
   );

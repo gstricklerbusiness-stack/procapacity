@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Assignment, TeamMember } from "@prisma/client";
 import {
   Table,
@@ -25,7 +26,8 @@ import {
 } from "@/components/ui/tooltip";
 import { AssignmentModal } from "@/components/assignment-modal";
 import { deleteAssignment } from "@/app/actions/assignments";
-import { MoreHorizontal, Pencil, Trash2, Users, AlertTriangle, CheckCircle } from "lucide-react";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { MoreHorizontal, Pencil, Trash2, Users, AlertTriangle, CheckCircle, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -54,22 +56,25 @@ export function AssignmentsTable({
   isOwner,
   utilizationImpacts = [],
 }: AssignmentsTableProps) {
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   // Create a map for quick lookup
   const impactMap = new Map(
     utilizationImpacts.map((u) => [u.assignmentId, u])
   );
 
-  const handleDelete = async (id: string, memberName: string) => {
-    if (!confirm(`Remove ${memberName} from this project?`)) {
-      return;
-    }
-
-    const result = await deleteAssignment(id);
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    const result = await deleteAssignment(deleteTarget.id);
     if (result.error) {
       toast.error(result.error);
     } else {
       toast.success("Assignment removed");
     }
+    setDeleting(false);
+    setDeleteTarget(null);
   };
 
   if (assignments.length === 0) {
@@ -77,12 +82,25 @@ export function AssignmentsTable({
       <div className="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400">
         <Users className="h-12 w-12 mb-4 opacity-50" />
         <p className="text-lg font-medium">No assignments yet</p>
-        <p className="text-sm">Add team members to this project</p>
+        <p className="text-sm mb-6">Add team members to this project to start planning capacity</p>
+        {isOwner && (
+          <AssignmentModal
+            mode="create"
+            projectId={projectId}
+            teamMembers={teamMembers}
+          >
+            <Button size="lg" className="bg-emerald-600 hover:bg-emerald-500 gap-2">
+              <UserPlus className="h-5 w-5" />
+              Assign Team Member
+            </Button>
+          </AssignmentModal>
+        )}
       </div>
     );
   }
 
   return (
+    <>
     <TooltipProvider>
       <Table>
         <TableHeader>
@@ -205,7 +223,7 @@ export function AssignmentsTable({
                       <DropdownMenuItem
                         className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
                         onSelect={() =>
-                          handleDelete(assignment.id, assignment.teamMember.name)
+                          setDeleteTarget({ id: assignment.id, name: assignment.teamMember.name })
                         }
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
@@ -221,6 +239,18 @@ export function AssignmentsTable({
         </TableBody>
       </Table>
     </TooltipProvider>
+
+    <ConfirmDialog
+      open={!!deleteTarget}
+      onOpenChange={(open) => !open && setDeleteTarget(null)}
+      title={`Remove ${deleteTarget?.name}?`}
+      description="This will remove the team member from this project. Their assignment hours will no longer be counted."
+      confirmLabel="Remove"
+      variant="destructive"
+      onConfirm={handleDelete}
+      loading={deleting}
+    />
+    </>
   );
 }
 

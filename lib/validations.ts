@@ -56,15 +56,20 @@ export const teamMemberUpdateSchema = teamMemberSchema.partial().extend({
 export const projectSchema = z.object({
   name: z.string().min(2, "Project name must be at least 2 characters"),
   clientName: z.string().optional(),
-  type: z.enum(["PROJECT", "RETAINER"]),
-  status: z.enum(["PLANNED", "ACTIVE", "COMPLETED"]).default("PLANNED"),
+  type: z.enum(["PROJECT", "RETAINER", "CAMPAIGN", "AUDIT"]),
+  status: z.enum(["PLANNED", "ACTIVE", "ON_HOLD", "COMPLETED", "ARCHIVED"]).default("PLANNED"),
   startDate: z.coerce.date(),
   endDate: z.coerce.date().optional().nullable(),
+  totalBudgetHours: z.number().int().min(1).optional().nullable(),
+  billingCycle: z.enum(["WEEKLY", "MONTHLY"]).optional().nullable(),
+  requiredSkills: z.array(z.string()).default([]),
+  ownerId: z.string().cuid().optional().nullable(),
   notes: z.string().optional(),
 });
 
 export const projectUpdateSchema = projectSchema.partial().extend({
   id: z.string().cuid(),
+  status: z.enum(["PLANNED", "ACTIVE", "ON_HOLD", "COMPLETED", "ARCHIVED"]).optional(),
 });
 
 // ============================================
@@ -77,8 +82,9 @@ export const assignmentSchema = z
     teamMemberId: z.string().cuid("Invalid team member"),
     startDate: z.coerce.date(),
     endDate: z.coerce.date(),
-    hoursPerWeek: z.number().int().min(1, "Hours must be at least 1").max(168, "Hours cannot exceed 168"),
+    hoursPerWeek: z.number().min(0.5, "Hours must be at least 0.5").max(168, "Hours cannot exceed 168"),
     billable: z.boolean().default(true),
+    roleOnProject: z.string().optional(),
     notes: z.string().optional(),
   })
   .refine((data) => data.endDate >= data.startDate, {
@@ -91,8 +97,9 @@ export const assignmentUpdateSchema = z
     id: z.string().cuid(),
     startDate: z.coerce.date().optional(),
     endDate: z.coerce.date().optional(),
-    hoursPerWeek: z.number().int().min(1).max(168).optional(),
+    hoursPerWeek: z.number().min(0.5).max(168).optional(),
     billable: z.boolean().optional(),
+    roleOnProject: z.string().optional(),
     notes: z.string().optional(),
   })
   .refine(
@@ -130,6 +137,26 @@ export const workspaceInviteSchema = z.object({
 });
 
 // ============================================
+// TEAM IMPORT SCHEMAS
+// ============================================
+
+export const importRowSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  email: z.string().email("Invalid email"),
+  role: z.enum(["OWNER", "MEMBER"]).default("MEMBER"),
+  title: z.string().optional(),
+  skills: z.array(z.object({
+    name: z.string(),
+    proficiency: z.enum(["BEGINNER", "PROFICIENT", "EXPERT"]),
+  })).optional(),
+});
+
+export const importRequestSchema = z.object({
+  rows: z.array(importRowSchema).min(1, "At least one row is required").max(200, "Maximum 200 rows per import"),
+  fileName: z.string().min(1, "File name is required"),
+});
+
+// ============================================
 // TYPE EXPORTS
 // ============================================
 
@@ -142,6 +169,10 @@ export type ProjectInput = z.infer<typeof projectSchema>;
 export type ProjectUpdateInput = z.infer<typeof projectUpdateSchema>;
 export type AssignmentInput = z.infer<typeof assignmentSchema>;
 export type AssignmentUpdateInput = z.infer<typeof assignmentUpdateSchema>;
+export type ProjectStatusType = "PLANNED" | "ACTIVE" | "ON_HOLD" | "COMPLETED" | "ARCHIVED";
+export type ProjectTypeType = "PROJECT" | "RETAINER" | "CAMPAIGN" | "AUDIT";
 export type WhosFreeSearchInput = z.infer<typeof whosFreeSearchSchema>;
 export type WorkspaceInviteInput = z.infer<typeof workspaceInviteSchema>;
+export type ImportRowInput = z.infer<typeof importRowSchema>;
+export type ImportRequestInput = z.infer<typeof importRequestSchema>;
 

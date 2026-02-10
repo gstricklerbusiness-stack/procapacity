@@ -341,9 +341,18 @@ export function UtilizationReport({ workspaceId }: UtilizationReportProps) {
                   <FileText className="h-4 w-4 mr-2" />
                   Export as CSV
                 </DropdownMenuItem>
-                <DropdownMenuItem disabled className="opacity-50">
+                <DropdownMenuItem
+                  onClick={() => {
+                    const params = new URLSearchParams({
+                      startDate: startDate,
+                      endDate: endDate,
+                      ...(roleFilter !== "all" ? { role: roleFilter } : {}),
+                    });
+                    window.open(`/api/reports/pdf?${params.toString()}`, "_blank");
+                  }}
+                >
                   <FileText className="h-4 w-4 mr-2" />
-                  Export as PDF (coming soon)
+                  Export as PDF
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

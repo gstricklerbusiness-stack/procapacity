@@ -1,9 +1,9 @@
 import { Check, X } from "lucide-react";
-import { FEATURE_COMPARISON, PLANS } from "@/lib/pricing";
+import { FEATURE_COMPARISON, PLANS, PLAN_ORDER } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 
 export function PricingComparison() {
-  const plans = Object.values(PLANS);
+  const plans = PLAN_ORDER.map((id) => PLANS[id]);
 
   return (
     <div className="container mx-auto px-4">
@@ -17,7 +17,7 @@ export function PricingComparison() {
       </div>
 
       {/* Desktop table */}
-      <div className="hidden lg:block max-w-5xl mx-auto">
+      <div className="hidden lg:block max-w-6xl mx-auto">
         <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
           <table className="w-full">
             <thead>
@@ -63,6 +63,9 @@ export function PricingComparison() {
                   <td className="py-4 px-6 text-center">
                     <FeatureValue value={feature.scale} />
                   </td>
+                  <td className="py-4 px-6 text-center">
+                    <FeatureValue value={feature.enterprise} />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -99,7 +102,11 @@ export function PricingComparison() {
             </h3>
             <dl className="space-y-3">
               {FEATURE_COMPARISON.map((feature, idx) => {
-                const planKey = plan.id.toLowerCase() as "starter" | "growth" | "scale";
+                const planKey = plan.id.toLowerCase() as
+                  | "starter"
+                  | "growth"
+                  | "scale"
+                  | "enterprise";
                 return (
                   <div key={idx} className="flex justify-between">
                     <dt className="text-sm text-slate-600 dark:text-slate-400">
@@ -134,4 +141,3 @@ function FeatureValue({ value }: { value: string | boolean }) {
     </span>
   );
 }
-

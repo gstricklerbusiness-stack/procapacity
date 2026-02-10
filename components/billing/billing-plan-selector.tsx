@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { 
-  PLANS, 
-  formatPrice, 
-  getYearlySavings, 
+import {
+  PLANS,
+  PLAN_ORDER,
+  formatPrice,
+  getYearlySavings,
   canDowngradeTo,
   type PlanId,
   type BillingPeriod,
@@ -20,6 +21,7 @@ interface BillingPlanSelectorProps {
   usage: {
     teamMembers: number;
     activeProjects: number;
+    activeUsers: number;
   };
   isSubscribed: boolean;
 }
@@ -30,21 +32,22 @@ export function BillingPlanSelector({
   usage,
   isSubscribed,
 }: BillingPlanSelectorProps) {
-  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>(currentPeriod);
+  const [billingPeriod, setBillingPeriod] =
+    useState<BillingPeriod>(currentPeriod);
   const [selectedPlan, setSelectedPlan] = useState<PlanId>(currentPlan);
   const [isLoading, setIsLoading] = useState(false);
 
-  const plans = Object.values(PLANS);
+  const plans = PLAN_ORDER.map((id) => PLANS[id]);
 
   const handleSelectPlan = async (planId: PlanId) => {
-    // Check if downgrading is possible
     if (planId !== currentPlan) {
-      const planOrder: PlanId[] = ["STARTER", "GROWTH", "SCALE"];
-      const currentIndex = planOrder.indexOf(currentPlan);
-      const newIndex = planOrder.indexOf(planId);
+      const currentIndex = PLAN_ORDER.indexOf(currentPlan);
+      const newIndex = PLAN_ORDER.indexOf(planId);
 
       if (newIndex < currentIndex) {
-        const { canDowngrade, reason } = canDowngradeTo(planId, usage);
+        const { canDowngrade, reason } = canDowngradeTo(planId, {
+          ...usage,
+        });
         if (!canDowngrade) {
           toast.error(reason);
           return;
@@ -98,7 +101,6 @@ export function BillingPlanSelector({
       const data = await response.json();
 
       if (data.success) {
-        // Show appropriate message based on change type
         toast.success(data.message || "Plan updated successfully");
         window.location.reload();
       } else if (data.error) {
@@ -111,14 +113,12 @@ export function BillingPlanSelector({
     }
   };
 
-  // Determine if selected plan is upgrade or downgrade
-  const planOrder: PlanId[] = ["STARTER", "GROWTH", "SCALE"];
-  const currentIndex = planOrder.indexOf(currentPlan);
-  const selectedIndex = planOrder.indexOf(selectedPlan);
+  const currentIndex = PLAN_ORDER.indexOf(currentPlan);
+  const selectedIndex = PLAN_ORDER.indexOf(selectedPlan);
   const isUpgrade = selectedIndex > currentIndex;
   const isDowngrade = selectedIndex < currentIndex;
-
-  const isCurrentSelection = selectedPlan === currentPlan && billingPeriod === currentPeriod;
+  const isCurrentSelection =
+    selectedPlan === currentPlan && billingPeriod === currentPeriod;
 
   return (
     <div className="space-y-6">
@@ -154,12 +154,17 @@ export function BillingPlanSelector({
       </div>
 
       {/* Plan cards */}
-      <div className="grid md:grid-cols-3 gap-4">
+      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
         {plans.map((plan) => {
-          const price = billingPeriod === "YEARLY" ? plan.pricing.yearly : plan.pricing.monthly;
+          const sp = plan.seatPricing;
+          const basePrice =
+            billingPeriod === "YEARLY" ? sp.baseYearly : sp.baseMonthly;
+          const perSeat =
+            billingPeriod === "YEARLY" ? sp.perSeatYearly : sp.perSeatMonthly;
           const savings = getYearlySavings(plan.id);
           const isSelected = selectedPlan === plan.id;
-          const isCurrent = currentPlan === plan.id && currentPeriod === billingPeriod;
+          const isCurrent =
+            currentPlan === plan.id && currentPeriod === billingPeriod;
 
           return (
             <button
@@ -195,21 +200,28 @@ export function BillingPlanSelector({
 
               <div className="flex items-baseline gap-1">
                 <span className="text-2xl font-bold text-slate-900 dark:text-white">
-                  {formatPrice(price)}
+                  {formatPrice(basePrice)}
                 </span>
                 <span className="text-sm text-slate-500">
                   /{billingPeriod === "YEARLY" ? "yr" : "mo"}
                 </span>
               </div>
 
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Includes {sp.includedSeats} seats, {formatPrice(perSeat)}/seat
+                after
+              </p>
+
               {billingPeriod === "YEARLY" && (
                 <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
-                  Save {formatPrice(savings)}/year
+                  Save {formatPrice(savings)}/year on base
                 </p>
               )}
 
               <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 space-y-1">
-                <p>{plan.limits.teamMembers} team members</p>
+                <p>
+                  Up to {sp.maxSeats} seats max
+                </p>
                 <p>{plan.limits.activeProjects} projects</p>
               </div>
             </button>
@@ -265,4 +277,3 @@ export function BillingPlanSelector({
     </div>
   );
 }
-

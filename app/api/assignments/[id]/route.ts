@@ -6,6 +6,8 @@ import { z } from "zod";
 const updateSchema = z.object({
   hoursPerWeek: z.number().min(0).max(168).optional(),
   billable: z.boolean().optional(),
+  roleOnProject: z.string().optional().nullable(),
+  teamMemberId: z.string().cuid().optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
   notes: z.string().optional(),
@@ -65,6 +67,12 @@ export async function PATCH(
     }
     if (parsed.data.endDate !== undefined) {
       updateData.endDate = new Date(parsed.data.endDate);
+    }
+    if (parsed.data.roleOnProject !== undefined) {
+      updateData.roleOnProject = parsed.data.roleOnProject;
+    }
+    if (parsed.data.teamMemberId !== undefined) {
+      updateData.teamMemberId = parsed.data.teamMemberId;
     }
     if (parsed.data.notes !== undefined) {
       updateData.notes = parsed.data.notes;

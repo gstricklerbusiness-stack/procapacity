@@ -266,10 +266,10 @@ export function AssignmentPanel({
           <Separator />
 
           {/* Add assignment button */}
-          <Link href={`/team?search=${encodeURIComponent(memberName)}`}>
+          <Link href={`/capacity?highlight=${memberId}`}>
             <Button variant="outline" className="w-full gap-2">
               <Plus className="h-4 w-4" />
-              Add assignment
+              View {memberName}&apos;s full schedule
             </Button>
           </Link>
         </div>

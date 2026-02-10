@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { addWeeks, startOfWeek, subWeeks } from "date-fns";
 import { INTERNAL_PROJECTS } from "@/lib/constants";
+import { SEED_SKILLS, INDUSTRY_SKILL_MAP } from "@/lib/seed-skills";
+import type { SkillCategory, SkillProficiency } from "@prisma/client";
 
 // Demo team members - 6 people with specific utilization patterns
 const DEMO_TEAM_MEMBERS = [
@@ -10,42 +12,48 @@ const DEMO_TEAM_MEMBERS = [
     name: "Sarah Chen",
     title: "Lead Designer",
     role: "Designer",
-    skills: ["Figma", "Brand", "UI/UX"],
+    skills: ["Figma design", "Brand identity", "UI/UX design"],
+    skillProficiencies: { "Figma design": "EXPERT" as SkillProficiency, "Brand identity": "EXPERT" as SkillProficiency, "UI/UX design": "PROFICIENT" as SkillProficiency },
     defaultWeeklyCapacityHours: 40,
   },
   {
     name: "Mike Johnson",
     title: "Senior Paid Media Manager",
     role: "Paid Media Specialist",
-    skills: ["Meta Ads", "Google Ads", "TikTok"],
+    skills: ["Facebook Ads", "Google Ads", "Paid social"],
+    skillProficiencies: { "Facebook Ads": "EXPERT" as SkillProficiency, "Google Ads": "EXPERT" as SkillProficiency, "Paid social": "PROFICIENT" as SkillProficiency },
     defaultWeeklyCapacityHours: 40,
   },
   {
     name: "Lisa Park",
     title: "SEO Manager",
     role: "SEO Strategist",
-    skills: ["Technical SEO", "Content Strategy"],
+    skills: ["SEO", "Content strategy", "Analytics"],
+    skillProficiencies: { "SEO": "EXPERT" as SkillProficiency, "Content strategy": "PROFICIENT" as SkillProficiency, "Analytics": "PROFICIENT" as SkillProficiency },
     defaultWeeklyCapacityHours: 40,
   },
   {
     name: "Tom Wilson",
     title: "Senior Developer",
     role: "Developer",
-    skills: ["React", "Node.js", "WordPress"],
+    skills: ["React", "Web development", "WordPress"],
+    skillProficiencies: { "React": "EXPERT" as SkillProficiency, "Web development": "EXPERT" as SkillProficiency, "WordPress": "PROFICIENT" as SkillProficiency },
     defaultWeeklyCapacityHours: 40,
   },
   {
     name: "Emma Davis",
     title: "Account Director",
     role: "Account Manager",
-    skills: ["Client Relations", "Project Management"],
+    skills: ["Client communication", "Project management", "Stakeholder management"],
+    skillProficiencies: { "Client communication": "EXPERT" as SkillProficiency, "Project management": "EXPERT" as SkillProficiency, "Stakeholder management": "PROFICIENT" as SkillProficiency },
     defaultWeeklyCapacityHours: 40,
   },
   {
     name: "James Lee",
     title: "Content Strategist",
     role: "Content Strategist",
-    skills: ["Copywriting", "Social Media"],
+    skills: ["Copywriting", "Content strategy", "Email marketing"],
+    skillProficiencies: { "Copywriting": "EXPERT" as SkillProficiency, "Content strategy": "PROFICIENT" as SkillProficiency, "Email marketing": "BEGINNER" as SkillProficiency },
     defaultWeeklyCapacityHours: 32, // Part-time
   },
 ];
@@ -57,45 +65,65 @@ const DEMO_PROJECTS = [
     clientName: "Acme Corp",
     type: "PROJECT" as const,
     status: "ACTIVE" as const,
-    startOffset: -2, // Started 2 weeks ago
-    endOffset: 6, // Ends in 6 weeks (Jan 1 to Mar 15 equivalent)
+    startOffset: -2,
+    endOffset: 6,
     notes: "Complete website redesign with new branding.",
+    totalBudgetHours: 400,
+    billingCycle: "WEEKLY" as const,
+    requiredSkills: ["Design", "Development", "Content Strategy"],
+    color: "#3b82f6",
   },
   {
     name: "TechStart Product Launch",
     clientName: "TechStart",
-    type: "PROJECT" as const,
+    type: "CAMPAIGN" as const,
     status: "ACTIVE" as const,
-    startOffset: -1, // Started last week
-    endOffset: 7, // Ends in 7 weeks (Jan 6 to Feb 28 equivalent)
+    startOffset: -1,
+    endOffset: 7,
     notes: "Product launch campaign across paid and organic channels.",
+    totalBudgetHours: 320,
+    billingCycle: "WEEKLY" as const,
+    requiredSkills: ["Paid Media", "SEO", "Content Strategy", "Analytics"],
+    color: "#8b5cf6",
   },
   {
     name: "GreenLife Brand Refresh",
     clientName: "GreenLife Organics",
     type: "PROJECT" as const,
     status: "PLANNED" as const,
-    startOffset: 2, // Starts in 2 weeks
-    endOffset: 14, // Ends in 14 weeks (Feb 1 to Apr 30 equivalent)
+    startOffset: 2,
+    endOffset: 14,
     notes: "Complete brand refresh including new visual identity.",
+    totalBudgetHours: 600,
+    billingCycle: "MONTHLY" as const,
+    requiredSkills: ["Design", "Brand Strategy", "Copywriting"],
+    color: "#22c55e",
   },
   {
     name: "Meridian Digital Retainer",
     clientName: "Meridian Group",
     type: "RETAINER" as const,
     status: "ACTIVE" as const,
-    startOffset: -12, // Ongoing retainer
-    endOffset: null, // No end date
+    startOffset: -12,
+    endOffset: null,
     notes: "Ongoing digital marketing retainer - paid media focus.",
+    totalBudgetHours: null,
+    billingCycle: "MONTHLY" as const,
+    requiredSkills: ["Paid Media", "Analytics"],
+    color: "#f97316",
   },
   {
     name: "Coastal Realty Monthly",
     clientName: "Coastal Realty",
     type: "RETAINER" as const,
     status: "ACTIVE" as const,
-    startOffset: -8, // Ongoing retainer
-    endOffset: null, // No end date
+    startOffset: -8,
+    endOffset: null,
     notes: "Monthly content and SEO retainer.",
+    totalBudgetHours: null,
+    billingCycle: "MONTHLY" as const,
+    requiredSkills: ["SEO", "Content Strategy", "Copywriting"],
+    color: "#14b8a6",
   },
 ];
 
@@ -153,6 +181,78 @@ export async function POST() {
       teamMembers.map((m: (typeof teamMembers)[number]) => [m.name, m])
     );
 
+    // Seed workspace skills for Marketing Agency vertical
+    const categories = INDUSTRY_SKILL_MAP["MARKETING_AGENCY"];
+    const skillRecords = new Map<string, string>(); // name -> id
+    for (const category of categories) {
+      const names = SEED_SKILLS[category] || [];
+      for (const name of names) {
+        if (!skillRecords.has(name)) {
+          try {
+            const skill = await prisma.skill.create({
+              data: {
+                name,
+                category: category as SkillCategory,
+                isPreset: true,
+                workspaceId,
+              },
+            });
+            skillRecords.set(name, skill.id);
+          } catch {
+            // Skip duplicates
+            const existing = await prisma.skill.findUnique({
+              where: { workspaceId_name: { workspaceId, name } },
+            });
+            if (existing) skillRecords.set(name, existing.id);
+          }
+        }
+      }
+    }
+
+    // Create TeamMemberSkill records for demo team members
+    for (const demoDef of DEMO_TEAM_MEMBERS) {
+      const member = memberByName[demoDef.name];
+      if (!member) continue;
+
+      for (const skillName of demoDef.skills) {
+        let skillId = skillRecords.get(skillName);
+        if (!skillId) {
+          // Create skill if not in preset list
+          try {
+            const skill = await prisma.skill.create({
+              data: {
+                name: skillName,
+                category: "GENERAL",
+                isPreset: false,
+                workspaceId,
+              },
+            });
+            skillId = skill.id;
+            skillRecords.set(skillName, skillId);
+          } catch {
+            const existing = await prisma.skill.findUnique({
+              where: { workspaceId_name: { workspaceId, name: skillName } },
+            });
+            if (existing) skillId = existing.id;
+          }
+        }
+        if (skillId) {
+          const proficiency = demoDef.skillProficiencies[skillName as keyof typeof demoDef.skillProficiencies] || "PROFICIENT";
+          try {
+            await prisma.teamMemberSkill.create({
+              data: {
+                teamMemberId: member.id,
+                skillId,
+                proficiency,
+              },
+            });
+          } catch {
+            // Skip duplicates
+          }
+        }
+      }
+    }
+
     // Create client projects
     const projects = await Promise.all(
       DEMO_PROJECTS.map((project) =>
@@ -167,6 +267,11 @@ export async function POST() {
               ? addWeeks(weekStart, project.endOffset)
               : null,
             notes: project.notes,
+            totalBudgetHours: project.totalBudgetHours,
+            billingCycle: project.billingCycle,
+            requiredSkills: project.requiredSkills,
+            color: project.color,
+            ownerId: session.user.id,
             workspaceId,
           },
         })
@@ -193,12 +298,14 @@ export async function POST() {
         teamMemberId: memberByName["Sarah Chen"].id,
         hoursPerWeek: 20,
         billable: true,
+        roleOnProject: "Lead Designer",
       },
       {
         projectId: projectByName["GreenLife Brand Refresh"].id,
         teamMemberId: memberByName["Sarah Chen"].id,
         hoursPerWeek: 15,
         billable: true,
+        roleOnProject: "Brand Designer",
       },
 
       // Mike Johnson - Paid Media - 112.5% over capacity (red)
@@ -207,12 +314,14 @@ export async function POST() {
         teamMemberId: memberByName["Mike Johnson"].id,
         hoursPerWeek: 25,
         billable: true,
+        roleOnProject: "Paid Media Lead",
       },
       {
         projectId: projectByName["TechStart Product Launch"].id,
         teamMemberId: memberByName["Mike Johnson"].id,
         hoursPerWeek: 20,
         billable: true,
+        roleOnProject: "Paid Media Specialist",
       },
 
       // Lisa Park - SEO - 62.5% with availability (green)
@@ -221,12 +330,14 @@ export async function POST() {
         teamMemberId: memberByName["Lisa Park"].id,
         hoursPerWeek: 15,
         billable: true,
+        roleOnProject: "SEO Lead",
       },
       {
         projectId: projectByName["TechStart Product Launch"].id,
         teamMemberId: memberByName["Lisa Park"].id,
         hoursPerWeek: 10,
         billable: true,
+        roleOnProject: "SEO Support",
       },
 
       // Tom Wilson - Developer - 95% near capacity (yellow)
@@ -235,6 +346,7 @@ export async function POST() {
         teamMemberId: memberByName["Tom Wilson"].id,
         hoursPerWeek: 30,
         billable: true,
+        roleOnProject: "Lead Developer",
       },
 
       // Emma Davis - Account Manager - 100% exactly at capacity
@@ -243,24 +355,28 @@ export async function POST() {
         teamMemberId: memberByName["Emma Davis"].id,
         hoursPerWeek: 10,
         billable: true,
+        roleOnProject: "Account Lead",
       },
       {
         projectId: projectByName["TechStart Product Launch"].id,
         teamMemberId: memberByName["Emma Davis"].id,
         hoursPerWeek: 10,
         billable: true,
+        roleOnProject: "Account Manager",
       },
       {
         projectId: projectByName["Meridian Digital Retainer"].id,
         teamMemberId: memberByName["Emma Davis"].id,
         hoursPerWeek: 10,
         billable: true,
+        roleOnProject: "Account Manager",
       },
       {
         projectId: projectByName["Coastal Realty Monthly"].id,
         teamMemberId: memberByName["Emma Davis"].id,
         hoursPerWeek: 10,
         billable: true,
+        roleOnProject: "Account Manager",
       },
 
       // James Lee - Content - 62.5% of 32h = green
@@ -269,6 +385,7 @@ export async function POST() {
         teamMemberId: memberByName["James Lee"].id,
         hoursPerWeek: 20,
         billable: true,
+        roleOnProject: "Content Strategist",
       },
     ];
 
@@ -294,6 +411,7 @@ export async function POST() {
               : addWeeks(weekStart, 12), // Default 12 weeks for retainers
             hoursPerWeek: data.hoursPerWeek,
             billable: data.billable,
+            roleOnProject: data.roleOnProject,
           },
         });
       })
@@ -318,10 +436,10 @@ export async function POST() {
       });
     }
 
-    // Mark onboarding as completed
+    // Mark onboarding as completed and set industry
     await prisma.workspace.update({
       where: { id: workspaceId },
-      data: { onboardingCompleted: true },
+      data: { onboardingCompleted: true, industry: "MARKETING_AGENCY" },
     });
 
     return NextResponse.json({

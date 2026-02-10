@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { TrialBanner, TrialExpiredBanner } from "@/components/trial-banner";
+import { KeyboardShortcuts } from "@/components/keyboard-shortcuts";
 import { PLANS, getDaysRemaining, isTrialActive, isTrialExpired, type PlanId } from "@/lib/pricing";
 
 export default async function DashboardLayout({
@@ -36,13 +37,14 @@ export default async function DashboardLayout({
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       {trialActive && <TrialBanner daysRemaining={daysRemaining} planName={planName} />}
       {trialExpired && <TrialExpiredBanner />}
-      <Sidebar user={session.user} />
+      <Sidebar user={{ ...session.user }} />
       <div className="lg:pl-72">
         <Header user={session.user} />
         <main className="py-8 px-4 sm:px-6 lg:px-8">
           {children}
         </main>
       </div>
+      <KeyboardShortcuts />
     </div>
   );
 }

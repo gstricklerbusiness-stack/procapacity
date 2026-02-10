@@ -57,13 +57,20 @@ interface UtilizationStat {
   utilization: number;
 }
 
+interface WorkspaceSkill {
+  id: string;
+  name: string;
+  category: string;
+}
+
 interface TeamTableProps {
   teamMembers: TeamMemberWithAssignments[];
   isOwner: boolean;
   utilizationMap?: Record<string, UtilizationStat>;
+  workspaceSkills?: WorkspaceSkill[];
 }
 
-export function TeamTable({ teamMembers, isOwner, utilizationMap = {} }: TeamTableProps) {
+export function TeamTable({ teamMembers, isOwner, utilizationMap = {}, workspaceSkills = [] }: TeamTableProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("active");
@@ -215,9 +222,9 @@ export function TeamTable({ teamMembers, isOwner, utilizationMap = {} }: TeamTab
                         />
                       </div>
                       <div className="min-w-0">
-                        <p className="font-medium text-slate-900 dark:text-white truncate">
+                        <Link href={`/team/${member.id}`} className="font-medium text-slate-900 dark:text-white truncate hover:text-primary transition-colors">
                           {member.name}
-                        </p>
+                        </Link>
                         {member.title && (
                           <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
                             {member.title}
@@ -296,7 +303,7 @@ export function TeamTable({ teamMembers, isOwner, utilizationMap = {} }: TeamTab
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <TeamMemberModal mode="edit" teamMember={member}>
+                          <TeamMemberModal mode="edit" teamMember={member} workspaceSkills={workspaceSkills}>
                             <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                               <Pencil className="mr-2 h-4 w-4" />
                               Edit

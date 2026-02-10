@@ -217,3 +217,50 @@ export function generateWeeksForView(numWeeks: number = 8): Date[] {
   return Array.from({ length: numWeeks }, (_, i) => addWeeks(startWeek, i));
 }
 
+/**
+ * Calculate average team utilization for each of the past N weeks.
+ * Returns an array of { weekStart, avgUtilization } in chronological order.
+ */
+export function getHistoricalUtilization(
+  teamMembers: TeamMember[],
+  numWeeks: number = 8
+): { weekStart: Date; avgUtilization: number }[] {
+  const today = new Date();
+  const currentWeek = startOfWeek(today, { weekStartsOn: 1 });
+  
+  const weeks: Date[] = [];
+  for (let i = numWeeks - 1; i >= 0; i--) {
+    weeks.push(addWeeks(currentWeek, -i));
+  }
+
+  return weeks.map((weekStart) => {
+    if (teamMembers.length === 0) {
+      return { weekStart, avgUtilization: 0 };
+    }
+    
+    const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
+    let totalUtilization = 0;
+
+    for (const member of teamMembers) {
+      let weekHours = 0;
+      for (const assignment of member.assignments) {
+        if (
+          isWithinInterval(weekStart, { start: assignment.startDate, end: assignment.endDate }) ||
+          isWithinInterval(assignment.startDate, { start: weekStart, end: weekEnd })
+        ) {
+          weekHours += assignment.hoursPerWeek;
+        }
+      }
+      const ratio = member.defaultWeeklyCapacityHours > 0
+        ? weekHours / member.defaultWeeklyCapacityHours
+        : 0;
+      totalUtilization += ratio;
+    }
+
+    return {
+      weekStart,
+      avgUtilization: totalUtilization / teamMembers.length,
+    };
+  });
+}
+
