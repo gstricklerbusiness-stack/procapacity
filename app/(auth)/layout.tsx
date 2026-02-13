@@ -36,30 +36,51 @@ export default function AuthLayout({
           </div>
           
           <div className="space-y-8">
-            <blockquote className="text-2xl font-light leading-relaxed text-slate-200">
-              &quot;Know who&apos;s free before you say yes.&quot;
-            </blockquote>
-            <p className="text-slate-400 max-w-md">
-              Capacity planning for 10–50 person marketing agencies. See who&apos;s at 40%, 80%, or 110% and decide who can take the next project.
-            </p>
-            
+            <div className="space-y-4">
+              <h1 className="text-4xl font-semibold tracking-tight leading-tight text-slate-100">
+                Stop burning out your best people.
+              </h1>
+              <p className="text-slate-300 max-w-md leading-relaxed">
+                Capacity planning for agencies, consultancies, and professional services firms. See who&apos;s at 40%, 80%, or 110%—and decide who can take the next project.
+              </p>
+              <p className="text-sm text-slate-400">
+                For teams of 10-200 people.
+              </p>
+            </div>
+
             {/* Feature pills */}
-            <div className="flex flex-wrap gap-3 pt-4">
-              <div className="px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm text-slate-300">
-                📊 Real-time utilization
+            <div className="flex flex-wrap gap-3 pt-2">
+              <div className="px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm text-slate-200">
+                🔍 Skills-based search
               </div>
-              <div className="px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm text-slate-300">
-                👥 Team capacity
+              <div className="px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm text-slate-200">
+                📊 Real-time capacity
               </div>
-              <div className="px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm text-slate-300">
-                🔍 Who&apos;s free search
+              <div className="px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm text-slate-200">
+                ⚠️ Burnout alerts
               </div>
             </div>
+
+            <div className="space-y-3 pt-2">
+              <a
+                href="/signup"
+                className="inline-flex items-center justify-center rounded-md bg-emerald-500 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
+              >
+                Start 14-day free trial
+              </a>
+              <p className="text-sm text-slate-400">
+                No credit card required • Set up in 5 minutes
+              </p>
+            </div>
           </div>
-          
-          <p className="text-sm text-slate-500">
-            Trusted by marketing agencies across the US
-          </p>
+
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-400">
+            <span>✓ Marketing Agencies</span>
+            <span>✓ Law Firms</span>
+            <span>✓ Consultancies</span>
+            <span>✓ Design Studios</span>
+            <span>✓ Architecture Firms</span>
+          </div>
         </div>
       </div>
       
