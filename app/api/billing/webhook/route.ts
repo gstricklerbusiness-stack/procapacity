@@ -13,12 +13,24 @@ export async function POST(request: NextRequest) {
   const body = await request.text();
   const headersList = await headers();
   const signature = headersList.get("stripe-signature");
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
   if (!signature) {
     return new NextResponse(JSON.stringify({ error: "Missing signature" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
+  }
+
+  if (!webhookSecret) {
+    console.error("STRIPE_WEBHOOK_SECRET is not configured");
+    return new NextResponse(
+      JSON.stringify({ error: "Webhook secret not configured" }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
   }
 
   const stripe = getStripe();
@@ -28,7 +40,7 @@ export async function POST(request: NextRequest) {
     event = stripe.webhooks.constructEvent(
       body,
       signature,
-      process.env.STRIPE_WEBHOOK_SECRET || ""
+      webhookSecret
     );
   } catch (error) {
     console.error("Webhook signature verification failed:", error);

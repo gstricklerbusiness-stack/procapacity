@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { PLANS, type PlanId } from "@/lib/pricing";
+import { auth } from "@/lib/auth";
 
 /**
  * Dev-only endpoint to backfill currentSeats and includedSeats on all workspaces.
@@ -12,6 +13,12 @@ export async function GET() {
       { error: "This endpoint is disabled in production" },
       { status: 403 }
     );
+  }
+
+  // Require auth even in non-prod
+  const session = await auth();
+  if (!session?.user || session.user.role !== "OWNER") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {

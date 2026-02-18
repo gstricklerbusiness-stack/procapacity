@@ -285,3 +285,45 @@ export async function deleteProject(id: string): Promise<ActionState> {
   }
 }
 
+export async function archiveProject(id: string): Promise<ActionState> {
+  const session = await auth();
+  if (!session?.user) {
+    return { error: "Unauthorized" };
+  }
+
+  if (session.user.role !== "OWNER") {
+    return { error: "Only owners can manage projects" };
+  }
+
+  // Verify ownership / workspace isolation
+  const existing = await prisma.project.findFirst({
+    where: {
+      id,
+      workspaceId: session.user.workspaceId,
+      active: true,
+    },
+    select: { id: true },
+  });
+
+  if (!existing) {
+    return { error: "Project not found" };
+  }
+
+  try {
+    await prisma.project.update({
+      where: { id },
+      data: { status: "ARCHIVED" },
+    });
+
+    revalidatePath("/projects");
+    revalidatePath(`/projects/${id}`);
+    revalidatePath("/capacity");
+    revalidatePath("/reports");
+    revalidatePath("/");
+    return { success: true };
+  } catch (error) {
+    console.error("Archive project error:", error);
+    return { error: "Failed to archive project" };
+  }
+}
+

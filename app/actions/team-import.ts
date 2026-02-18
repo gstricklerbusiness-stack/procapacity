@@ -73,11 +73,15 @@ export interface ValidateImportResult {
  * Calculate the billing impact of adding N users to a workspace.
  */
 export async function previewBillingImpact(
-  workspaceId: string,
   newUserCount: number
 ): Promise<BillingPreview> {
+  const session = await auth();
+  if (!session?.user) {
+    throw new Error("Unauthorized");
+  }
+
   const workspace = await prisma.workspace.findUniqueOrThrow({
-    where: { id: workspaceId },
+    where: { id: session.user.workspaceId },
     select: {
       plan: true,
       billingPeriod: true,
@@ -177,7 +181,6 @@ export async function validateImportAction(
 
   // Calculate billing impact for valid rows only
   const billing = await previewBillingImpact(
-    workspaceId,
     validation.validRows.length
   );
 

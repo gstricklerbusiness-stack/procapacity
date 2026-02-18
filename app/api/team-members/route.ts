@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import { canAddTeamMember } from "@/lib/plan-limits";
 
 const createSchema = z.object({
   name: z.string().min(1),
@@ -22,6 +23,19 @@ export async function POST(request: Request) {
   if (session.user.role !== "OWNER") {
     return NextResponse.json(
       { error: "Only owners can add team members" },
+      { status: 403 }
+    );
+  }
+
+  // Enforce plan limits
+  const canAdd = await canAddTeamMember(session.user.workspaceId);
+  if (!canAdd.allowed) {
+    return NextResponse.json(
+      {
+        error: canAdd.reason,
+        upgradeRequired: canAdd.upgradeRequired,
+        upgradePlan: canAdd.upgradePlan,
+      },
       { status: 403 }
     );
   }

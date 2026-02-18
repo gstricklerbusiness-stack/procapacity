@@ -15,13 +15,14 @@ interface ActionState {
 // ─── Seed workspace skills from industry ──────────────────────────
 
 export async function seedWorkspaceSkills(
-  workspaceId: string,
   industry: IndustryVertical
 ): Promise<{ success: boolean; count: number; error?: string }> {
   const session = await auth();
   if (!session?.user || session.user.role !== "OWNER") {
     return { success: false, count: 0, error: "Unauthorized" };
   }
+
+  const workspaceId = session.user.workspaceId;
 
   try {
     const categories = INDUSTRY_SKILL_MAP[industry];
@@ -220,6 +221,20 @@ export async function assignSkillToMember(
   }
 
   try {
+    // Verify team member belongs to workspace
+    const member = await prisma.teamMember.findFirst({
+      where: { id: teamMemberId, workspaceId: session.user.workspaceId },
+      select: { id: true },
+    });
+    if (!member) return { error: "Team member not found" };
+
+    // Verify skill belongs to workspace
+    const skill = await prisma.skill.findFirst({
+      where: { id: skillId, workspaceId: session.user.workspaceId },
+      select: { id: true },
+    });
+    if (!skill) return { error: "Skill not found" };
+
     await prisma.teamMemberSkill.upsert({
       where: {
         teamMemberId_skillId: { teamMemberId, skillId },
@@ -251,6 +266,20 @@ export async function removeSkillFromMember(
   }
 
   try {
+    // Verify team member belongs to workspace
+    const member = await prisma.teamMember.findFirst({
+      where: { id: teamMemberId, workspaceId: session.user.workspaceId },
+      select: { id: true },
+    });
+    if (!member) return { error: "Team member not found" };
+
+    // Verify skill belongs to workspace
+    const skill = await prisma.skill.findFirst({
+      where: { id: skillId, workspaceId: session.user.workspaceId },
+      select: { id: true },
+    });
+    if (!skill) return { error: "Skill not found" };
+
     await prisma.teamMemberSkill.delete({
       where: {
         teamMemberId_skillId: { teamMemberId, skillId },
@@ -280,6 +309,28 @@ export async function updateMemberSkills(
   }
 
   try {
+    // Verify team member belongs to workspace
+    const member = await prisma.teamMember.findFirst({
+      where: { id: teamMemberId, workspaceId: session.user.workspaceId },
+      select: { id: true },
+    });
+    if (!member) return { error: "Team member not found" };
+
+    // Verify ALL skill IDs belong to workspace
+    if (skills.length > 0) {
+      const uniqueSkillIds = Array.from(new Set(skills.map((s) => s.skillId)));
+      const validSkills = await prisma.skill.findMany({
+        where: {
+          id: { in: uniqueSkillIds },
+          workspaceId: session.user.workspaceId,
+        },
+        select: { id: true },
+      });
+      if (validSkills.length !== uniqueSkillIds.length) {
+        return { error: "One or more skills not found in workspace" };
+      }
+    }
+
     // Delete all existing and recreate
     await prisma.teamMemberSkill.deleteMany({
       where: { teamMemberId },
@@ -309,6 +360,24 @@ export async function updateMemberSkills(
 // ─── Sync TeamMember.skills String[] from join table ──────────────
 
 export async function syncMemberSkillsArray(teamMemberId: string): Promise<void> {
+  const session = await auth();
+  if (!session?.user) {
+    throw new Error("Unauthorized");
+  }
+
+  // Verify teamMemberId belongs to user's workspace
+  const member = await prisma.teamMember.findFirst({
+    where: {
+      id: teamMemberId,
+      workspaceId: session.user.workspaceId,
+    },
+    select: { id: true },
+  });
+
+  if (!member) {
+    throw new Error("Team member not found");
+  }
+
   const memberSkills = await prisma.teamMemberSkill.findMany({
     where: { teamMemberId },
     include: { skill: { select: { name: true } } },
@@ -324,11 +393,13 @@ export async function syncMemberSkillsArray(teamMemberId: string): Promise<void>
 
 // ─── Backfill: migrate existing String[] skills to Skill records ──
 
-export async function backfillWorkspaceSkills(workspaceId: string): Promise<{ count: number }> {
+export async function backfillWorkspaceSkills(): Promise<{ count: number }> {
   const session = await auth();
   if (!session?.user || session.user.role !== "OWNER") {
     return { count: 0 };
   }
+
+  const workspaceId = session.user.workspaceId;
 
   // Get all unique skill names from team members
   const teamMembers = await prisma.teamMember.findMany({

@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma";
-import { PLANS, isTrialExpired, type PlanId } from "@/lib/pricing";
+import { PLANS, getNextPlan, isTrialExpired, type PlanId } from "@/lib/pricing";
 import { canAddSeat, calculateExtraSeats } from "@/lib/seat-utils";
 
 export interface PlanCheckResult {
   allowed: boolean;
   reason?: string;
   upgradeRequired?: boolean;
+  upgradePlan?: PlanId;
 }
 
 export interface SeatCheckResult extends PlanCheckResult {
@@ -92,6 +93,7 @@ export async function canAddTeamMember(
       allowed: false,
       reason: `You've reached the limit of ${limits.teamMembers} team members on the ${PLANS[workspace.plan as PlanId].name} plan. Please upgrade to add more.`,
       upgradeRequired: true,
+      upgradePlan: getNextPlan(workspace.plan as PlanId) ?? undefined,
     };
   }
 
@@ -142,6 +144,7 @@ export async function canAddProject(
       allowed: false,
       reason: `You've reached the limit of ${limits.activeProjects} active projects on the ${PLANS[workspace.plan as PlanId].name} plan. Please upgrade to add more.`,
       upgradeRequired: true,
+      upgradePlan: getNextPlan(workspace.plan as PlanId) ?? undefined,
     };
   }
 

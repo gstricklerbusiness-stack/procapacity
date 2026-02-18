@@ -39,7 +39,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { ProjectModal } from "@/components/project-modal";
-import { deleteProject } from "@/app/actions/projects";
+import { archiveProject } from "@/app/actions/projects";
 import {
   MoreHorizontal,
   Pencil,
@@ -94,8 +94,8 @@ export function ProjectsTable({ projects, isOwner, workspaceUsers = [], currentU
     return matchesSearch && matchesType && matchesStatus;
   });
 
-  const handleDelete = async (id: string, name: string) => {
-    const result = await deleteProject(id);
+  const handleArchive = async (id: string, name: string) => {
+    const result = await archiveProject(id);
     if (result.error) {
       toast.error(result.error);
     } else {
@@ -400,7 +400,7 @@ export function ProjectsTable({ projects, isOwner, workspaceUsers = [], currentU
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                                 <AlertDialogAction
                                   className="bg-red-600 hover:bg-red-700"
-                                  onClick={() => handleDelete(project.id, project.name)}
+                                  onClick={() => handleArchive(project.id, project.name)}
                                 >
                                   Archive
                                 </AlertDialogAction>

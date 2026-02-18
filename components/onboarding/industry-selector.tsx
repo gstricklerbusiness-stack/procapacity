@@ -29,11 +29,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   settings: <Settings className="h-6 w-6" />,
 };
 
-interface IndustrySelectorProps {
-  workspaceId: string;
-}
-
-export function IndustrySelector({ workspaceId }: IndustrySelectorProps) {
+export function IndustrySelector() {
   const [selected, setSelected] = useState<IndustryVertical | null>(null);
   const [isPending, setIsPending] = useState(false);
   const [isSkipping, setIsSkipping] = useState(false);
@@ -44,7 +40,7 @@ export function IndustrySelector({ workspaceId }: IndustrySelectorProps) {
 
     setIsPending(true);
     try {
-      const result = await seedWorkspaceSkills(workspaceId, selected);
+      const result = await seedWorkspaceSkills(selected);
       if (result.error) {
         toast.error(result.error);
       } else {
@@ -64,7 +60,7 @@ export function IndustrySelector({ workspaceId }: IndustrySelectorProps) {
     setIsSkipping(true);
     try {
       // Just mark onboarding as completed without seeding skills
-      await seedWorkspaceSkills(workspaceId, "CUSTOM");
+      await seedWorkspaceSkills("CUSTOM");
       router.refresh();
     } catch {
       toast.error("Something went wrong");

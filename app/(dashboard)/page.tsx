@@ -213,7 +213,7 @@ export default async function DashboardPage() {
 
   // Show industry selector for new workspaces that haven't chosen yet
   if (needsIndustrySelection) {
-    return <IndustrySelector workspaceId={workspaceId} />;
+    return <IndustrySelector />;
   }
 
   // Show empty state for new workspaces
@@ -403,13 +403,13 @@ export default async function DashboardPage() {
               <div className={`p-2 rounded-lg group-hover:scale-110 transition-transform ${
                 overCapacityCount > 0
                   ? "bg-red-100 dark:bg-red-900/40"
-                  : "bg-emerald-100 dark:bg-emerald-900/40"
+                  : "bg-red-100 dark:bg-red-900/40"
               }`}>
                 <AlertTriangle
                   className={`h-4 w-4 ${
                     overCapacityCount > 0
                       ? "text-red-600 dark:text-red-400"
-                      : "text-emerald-600 dark:text-emerald-400"
+                      : "text-red-600 dark:text-red-400"
                   }`}
                 />
               </div>
@@ -426,7 +426,7 @@ export default async function DashboardPage() {
                   {overCapacityCount}
                 </span>
                 {overCapacityCount === 0 && (
-                  <span className="text-xs text-emerald-600 dark:text-emerald-400 mb-1">All clear</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400 mb-1">All clear</span>
                 )}
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">

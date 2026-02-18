@@ -58,14 +58,16 @@ export async function POST(request: Request) {
     } catch (emailError) {
       // Log the error but still return success to prevent enumeration
       console.error("Failed to send password reset email:", emailError);
-      // Fallback: log to console for debugging
-      console.log("=".repeat(60));
-      console.log("PASSWORD RESET LINK (email failed)");
-      console.log("=".repeat(60));
-      console.log(`Email: ${email}`);
-      console.log(`Reset URL: ${resetUrl}`);
-      console.log(`Expires: ${resetExpires.toISOString()}`);
-      console.log("=".repeat(60));
+      // Only log the reset URL in development to avoid leaking tokens in production logs
+      if (process.env.NODE_ENV !== "production") {
+        console.log("=".repeat(60));
+        console.log("PASSWORD RESET LINK (email failed)");
+        console.log("=".repeat(60));
+        console.log(`Email: ${email}`);
+        console.log(`Reset URL: ${resetUrl}`);
+        console.log(`Expires: ${resetExpires.toISOString()}`);
+        console.log("=".repeat(60));
+      }
     }
 
     return NextResponse.json({ success: true });

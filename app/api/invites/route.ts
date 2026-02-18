@@ -105,7 +105,14 @@ export async function POST(request: Request) {
   return NextResponse.json({
     success: true,
     message: `Invite sent to ${normalizedEmail}`,
-    inviteUrl, // Include for development/debugging
+    invite: {
+      id: invite.id,
+      email: invite.email,
+      role: invite.role,
+      createdAt: invite.createdAt,
+      expiresAt: invite.expiresAt,
+    },
+    ...(process.env.NODE_ENV !== "production" ? { inviteUrl } : {}),
   });
 }
 
@@ -132,6 +139,13 @@ export async function GET() {
     where: {
       workspaceId: user.workspaceId!,
       expiresAt: { gt: new Date() },
+    },
+    select: {
+      id: true,
+      email: true,
+      role: true,
+      createdAt: true,
+      expiresAt: true,
     },
     orderBy: { createdAt: "desc" },
   });

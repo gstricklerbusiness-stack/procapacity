@@ -24,8 +24,8 @@ export function AlertsCard({ alerts }: AlertsCardProps) {
       <Card className="shadow-card">
         <CardHeader>
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/40">
-              <AlertTriangle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+            <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/40">
+              <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
             </div>
             <div>
               <CardTitle className="text-base">Alerts</CardTitle>
@@ -35,7 +35,7 @@ export function AlertsCard({ alerts }: AlertsCardProps) {
         </CardHeader>
         <CardContent>
           <div className="text-center py-6">
-            <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">
+            <p className="text-sm text-slate-600 dark:text-slate-300 font-medium">
               All clear! No capacity issues this week.
             </p>
           </div>

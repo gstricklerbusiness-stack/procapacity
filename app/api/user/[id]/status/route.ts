@@ -41,28 +41,19 @@ export async function PATCH(
       );
     }
 
-    // Find the target user
-    const targetUser = await prisma.user.findUnique({
-      where: { id: userId },
+    // Find the target user (scoped to current workspace to avoid existence leak)
+    const targetUser = await prisma.user.findFirst({
+      where: { id: userId, workspaceId: session.user.workspaceId },
       select: {
         id: true,
         name: true,
         email: true,
         active: true,
-        workspaceId: true,
       },
     });
 
     if (!targetUser) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    // Must be in the same workspace
-    if (targetUser.workspaceId !== session.user.workspaceId) {
-      return NextResponse.json(
-        { error: "User is not in your workspace" },
-        { status: 403 }
-      );
     }
 
     // Cannot deactivate yourself
@@ -84,7 +75,7 @@ export async function PATCH(
 
     // If reactivating, check seat limits first
     if (active) {
-      const seatCheck = await canAddSeat(targetUser.workspaceId);
+      const seatCheck = await canAddSeat(session.user.workspaceId);
       if (!seatCheck.allowed) {
         return NextResponse.json(
           {
@@ -111,7 +102,7 @@ export async function PATCH(
     });
 
     // Sync seats (updates DB count + Stripe quantity)
-    await syncWorkspaceSeats(targetUser.workspaceId);
+    await syncWorkspaceSeats(session.user.workspaceId);
 
     return NextResponse.json({
       success: true,
