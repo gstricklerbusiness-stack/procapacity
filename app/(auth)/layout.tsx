@@ -41,7 +41,7 @@ export default function AuthLayout({
                 Stop burning out your best people.
               </h1>
               <p className="text-slate-300 max-w-md leading-relaxed">
-                Capacity planning for agencies, consultancies, and professional services firms. See who&apos;s at 40%, 80%, or 110%—and decide who can take the next project.
+                Capacity planning for agencies, consultancies, and professional services firms. See who&apos;s at 40%, 80%, or 110% and decide who can take the next project.
               </p>
               <p className="text-sm text-slate-400">
                 For teams of 10-200 people.
