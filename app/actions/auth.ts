@@ -6,7 +6,7 @@ import bcrypt from "bcryptjs";
 import { signUpSchema, inviteAcceptSchema } from "@/lib/validations";
 import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
-import { getTrialEndDate, DEFAULT_TRIAL_PLAN } from "@/lib/pricing";
+import { getTrialEndDate, DEFAULT_TRIAL_PLAN, PLANS } from "@/lib/pricing";
 import { sendWelcomeEmail } from "@/lib/email";
 import { syncWorkspaceSeats, addUserWithSeatCheck } from "@/lib/seat-utils";
 
@@ -45,12 +45,17 @@ export async function signUpAction(
   const passwordHash = await bcrypt.hash(password, 12);
 
   try {
-    // Create workspace and user together with trial
+    // New workspaces start on the Enterprise plan during the 14-day trial.
+    // This allows full feature testing (including large imports) without hitting limits.
+    // After trial ends, the workspace becomes read-only until they subscribe.
     const workspace = await prisma.workspace.create({
       data: {
         name: workspaceName,
         plan: DEFAULT_TRIAL_PLAN,
+        billingPeriod: "MONTHLY",
         trialEndsAt: getTrialEndDate(),
+        currentSeats: 1,
+        includedSeats: PLANS[DEFAULT_TRIAL_PLAN].seatPricing.includedSeats,
         users: {
           create: {
             name,

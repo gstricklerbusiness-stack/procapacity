@@ -404,7 +404,7 @@ export const PRICING_FAQ = [
 // ---------------------------------------------------------------------------
 
 export const TRIAL_DAYS = 14;
-export const DEFAULT_TRIAL_PLAN: PlanId = "GROWTH";
+export const DEFAULT_TRIAL_PLAN: PlanId = "ENTERPRISE";
 
 // ---------------------------------------------------------------------------
 // Helper functions
