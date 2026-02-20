@@ -365,56 +365,100 @@ export async function executeImportAction(
         validRows.map((row) => [row.email.trim().toLowerCase(), row.skills || []])
       );
 
-      // Create a TeamMember for each imported user so they appear on /team
-      for (const user of createdUsers) {
-        const parsedSkills = skillsByEmail.get(user.email) || [];
-        const skillNames = parsedSkills.map((s: { name: string }) => s.name);
+      // Pre-create all Skill records needed for this import in bulk to reduce per-row queries.
+      const uniqueSkillNames = Array.from(
+        new Set(
+          Array.from(skillsByEmail.values())
+            .flat()
+            .map((s: { name: string }) => s.name?.trim())
+            .filter(Boolean) as string[]
+        )
+      );
 
-        const teamMember = await tx.teamMember.create({
-          data: {
-            name: user.name ?? user.email,
-            title: titleByEmail.get(user.email) ?? null,
-            role: "Team Member",
-            skills: skillNames,
-            defaultWeeklyCapacityHours:
-              workspace.defaultCapacityHours ?? 40,
-            active: true,
-            workspaceId,
-          },
+      const skillIdByName = new Map<string, string>();
+      if (uniqueSkillNames.length > 0) {
+        const existingSkills = await tx.skill.findMany({
+          where: { workspaceId, name: { in: uniqueSkillNames } },
+          select: { id: true, name: true },
         });
+        for (const s of existingSkills) skillIdByName.set(s.name, s.id);
 
-        // Create TeamMemberSkill records if skills were provided
-        if (parsedSkills.length > 0) {
+        const missing = uniqueSkillNames.filter((n) => !skillIdByName.has(n));
+        if (missing.length > 0) {
+          await tx.skill.createMany({
+            data: missing.map((name) => ({
+              name,
+              category: "GENERAL",
+              isPreset: false,
+              workspaceId,
+            })),
+            skipDuplicates: true,
+          });
+
+          const allSkills = await tx.skill.findMany({
+            where: { workspaceId, name: { in: uniqueSkillNames } },
+            select: { id: true, name: true },
+          });
+          for (const s of allSkills) skillIdByName.set(s.name, s.id);
+        }
+      }
+
+      // Create a TeamMember for each imported user so they appear on /team
+      const teamMemberSkillRows: Array<{
+        teamMemberId: string;
+        skillId: string;
+        proficiency: "BEGINNER" | "PROFICIENT" | "EXPERT";
+      }> = [];
+
+      for (const user of createdUsers) {
+        try {
+          const parsedSkills = skillsByEmail.get(user.email) || [];
+          const skillNames = parsedSkills.map((s: { name: string }) => s.name);
+
+          const teamMember = await tx.teamMember.create({
+            data: {
+              name: user.name ?? user.email,
+              title: titleByEmail.get(user.email) ?? null,
+              role: "Team Member",
+              skills: skillNames,
+              defaultWeeklyCapacityHours: workspace.defaultCapacityHours ?? 40,
+              active: true,
+              workspaceId,
+            },
+          });
+
+          // Collect TeamMemberSkill rows for bulk insert later
           for (const ps of parsedSkills) {
-            // Find or create the Skill record
-            let skill = await tx.skill.findUnique({
-              where: { workspaceId_name: { workspaceId, name: ps.name } },
-            });
-            if (!skill) {
-              skill = await tx.skill.create({
-                data: {
-                  name: ps.name,
-                  category: "GENERAL",
-                  isPreset: false,
-                  workspaceId,
-                },
-              });
-            }
-            // Create the join table entry
-            await tx.teamMemberSkill.create({
-              data: {
-                teamMemberId: teamMember.id,
-                skillId: skill.id,
-                proficiency: ps.proficiency || "PROFICIENT",
-              },
+            const skillName = ps.name?.trim();
+            if (!skillName) continue;
+            const skillId = skillIdByName.get(skillName);
+            if (!skillId) continue;
+            teamMemberSkillRows.push({
+              teamMemberId: teamMember.id,
+              skillId,
+              proficiency: ps.proficiency || "PROFICIENT",
             });
           }
-        }
 
-        // Link User → TeamMember
-        await tx.user.update({
-          where: { id: user.id },
-          data: { teamMemberId: teamMember.id },
+          // Link User → TeamMember
+          await tx.user.update({
+            where: { id: user.id },
+            data: { teamMemberId: teamMember.id },
+          });
+        } catch (err) {
+          throw new Error(
+            `Failed to import row for ${user.email}: ${
+              err instanceof Error ? err.message : String(err)
+            }`
+          );
+        }
+      }
+
+      // Bulk create TeamMemberSkill rows (faster than per-row inserts)
+      if (teamMemberSkillRows.length > 0) {
+        await tx.teamMemberSkill.createMany({
+          data: teamMemberSkillRows,
+          skipDuplicates: true,
         });
       }
 
@@ -441,7 +485,7 @@ export async function executeImportAction(
       });
 
       return { count: createResult.count, importId: audit.id };
-    });
+    }, { maxWait: 30000, timeout: 30000 });
 
     importedCount = result.count;
     importId = result.importId;
