@@ -8,7 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProjectModal } from "@/components/project-modal";
 import { AssignmentsTable } from "@/components/assignments-table";
-import { AssignmentModal } from "@/components/assignment-modal";
 import { ProjectStatusChanger } from "@/components/project-status-changer";
 import { ArrowLeft, Pencil, Plus, Calendar, Users, Clock, Copy, Target, Briefcase } from "lucide-react";
 import { format, startOfWeek, eachWeekOfInterval, isWithinInterval, endOfWeek, differenceInWeeks } from "date-fns";
@@ -413,18 +412,6 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
                   <CardTitle>Assignments</CardTitle>
                   <CardDescription>Team members assigned to this project</CardDescription>
                 </div>
-                {isOwner && (
-                  <AssignmentModal
-                    mode="create"
-                    projectId={project.id}
-                    teamMembers={teamMembers}
-                  >
-                    <Button className="bg-emerald-600 hover:bg-emerald-500">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add assignment
-                    </Button>
-                  </AssignmentModal>
-                )}
               </div>
             </CardHeader>
             <CardContent>
