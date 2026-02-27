@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "deny": [
+      "**/.env*",
+      "**/node_modules/**",
+      "**/.git/**"
+    ]
+  }
+}

@@ -3,6 +3,14 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { addWeeks } from "date-fns";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
+
+const shiftTimelineSchema = z.object({
+  projectId: z.string().min(1),
+  deltaWeeks: z.number().int().min(-104).max(104).refine((n) => n !== 0, {
+    message: "deltaWeeks must not be zero",
+  }),
+});
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -15,11 +23,13 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { projectId, deltaWeeks } = body;
+  const parsed = shiftTimelineSchema.safeParse(body);
 
-  if (!projectId || typeof deltaWeeks !== "number" || deltaWeeks === 0) {
-    return NextResponse.json({ error: "Invalid parameters" }, { status: 400 });
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid parameters", details: parsed.error.flatten() }, { status: 400 });
   }
+
+  const { projectId, deltaWeeks } = parsed.data;
 
   // Verify project belongs to workspace
   const project = await prisma.project.findFirst({

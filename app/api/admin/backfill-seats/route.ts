@@ -4,7 +4,8 @@ import { PLANS, type PlanId } from "@/lib/pricing";
 import { auth } from "@/lib/auth";
 
 /**
- * Dev-only endpoint to backfill currentSeats and includedSeats on all workspaces.
+ * Dev-only endpoint to backfill currentSeats and includedSeats.
+ * Scoped to the caller's own workspace only.
  * Visit: GET /api/admin/backfill-seats
  */
 export async function GET() {
@@ -22,7 +23,9 @@ export async function GET() {
   }
 
   try {
+    // SECURITY: Only fetch the caller's own workspace, never all workspaces
     const workspaces = await prisma.workspace.findMany({
+      where: { id: session.user.workspaceId },
       select: {
         id: true,
         name: true,

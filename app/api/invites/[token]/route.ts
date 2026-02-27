@@ -9,21 +9,25 @@ export async function GET(
 
   const invite = await prisma.workspaceInvite.findUnique({
     where: { token },
-    include: { workspace: true },
+    select: {
+      expiresAt: true,
+      workspace: { select: { name: true } },
+    },
   });
 
   if (!invite) {
+    // Use same status for not-found and expired to prevent token enumeration timing
     return NextResponse.json({ valid: false }, { status: 404 });
   }
 
   if (invite.expiresAt < new Date()) {
-    return NextResponse.json({ valid: false }, { status: 410 });
+    return NextResponse.json({ valid: false }, { status: 404 });
   }
 
+  // Only expose workspace name — email is omitted to limit information disclosure
   return NextResponse.json({
     valid: true,
     workspaceName: invite.workspace.name,
-    email: invite.email,
   });
 }
 

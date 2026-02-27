@@ -4,6 +4,12 @@ import { prisma } from "@/lib/prisma";
 import { randomBytes } from "crypto";
 import { sendTeamInviteEmail } from "@/lib/email";
 import { canAddUser } from "@/lib/plan-limits";
+import { z } from "zod";
+
+const inviteSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  role: z.enum(["OWNER", "MEMBER"]).optional().default("MEMBER"),
+});
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -24,13 +30,14 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { email, role = "MEMBER" } = body;
+  const parsed = inviteSchema.safeParse(body);
 
-  if (!email || typeof email !== "string") {
-    return NextResponse.json({ error: "Email is required" }, { status: 400 });
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0]?.message || "Invalid input" }, { status: 400 });
   }
 
-  const normalizedEmail = email.trim().toLowerCase();
+  const normalizedEmail = parsed.data.email.trim().toLowerCase();
+  const role = parsed.data.role;
 
   // Check if user already exists in this workspace
   const existingUser = await prisma.user.findFirst({
@@ -78,7 +85,7 @@ export async function POST(request: Request) {
     data: {
       email: normalizedEmail,
       token,
-      role: role === "OWNER" ? "OWNER" : "MEMBER",
+      role,
       expiresAt,
       workspaceId: user.workspaceId!,
     },

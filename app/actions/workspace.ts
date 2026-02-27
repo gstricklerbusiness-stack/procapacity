@@ -65,6 +65,16 @@ export async function updateWorkspaceSettings(input: UpdateWorkspaceSettingsInpu
 }
 
 export async function getWorkspaceSettings(workspaceId: string) {
+  const session = await auth();
+  if (!session?.user) {
+    return null;
+  }
+
+  // SECURITY: Only allow reading settings for the caller's own workspace
+  if (session.user.workspaceId !== workspaceId) {
+    return null;
+  }
+
   const workspace = await prisma.workspace.findUnique({
     where: { id: workspaceId },
     select: {

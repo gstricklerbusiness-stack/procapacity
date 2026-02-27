@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { startOfWeek, eachWeekOfInterval, isWithinInterval, endOfWeek } from "date-fns";
+import { z } from "zod";
+
+const querySchema = z.object({
+  startDate: z.coerce.date(),
+  endDate: z.coerce.date(),
+  role: z.string().max(100).optional(),
+});
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -10,19 +17,22 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const startDateParam = searchParams.get("startDate");
-  const endDateParam = searchParams.get("endDate");
-  const roleFilter = searchParams.get("role");
+  const parsed = querySchema.safeParse({
+    startDate: searchParams.get("startDate"),
+    endDate: searchParams.get("endDate"),
+    role: searchParams.get("role") || undefined,
+  });
 
-  if (!startDateParam || !endDateParam) {
+  if (!parsed.success) {
     return NextResponse.json(
-      { error: "startDate and endDate are required" },
+      { error: "Invalid parameters", details: parsed.error.flatten() },
       { status: 400 }
     );
   }
 
-  const startDate = startOfWeek(new Date(startDateParam), { weekStartsOn: 1 });
-  const endDate = startOfWeek(new Date(endDateParam), { weekStartsOn: 1 });
+  const startDate = startOfWeek(parsed.data.startDate, { weekStartsOn: 1 });
+  const endDate = startOfWeek(parsed.data.endDate, { weekStartsOn: 1 });
+  const roleFilter = parsed.data.role;
 
   // Get weeks in range
   const weeks = eachWeekOfInterval(

@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { startOfWeek, addWeeks, isWithinInterval, endOfWeek } from "date-fns";
+import { z } from "zod";
+
+const querySchema = z.object({
+  hoursPerWeek: z.coerce.number().min(1).max(168).default(20),
+  weeks: z.coerce.number().int().min(1).max(52).default(4),
+  skill: z.string().max(100).optional(),
+});
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -10,9 +17,22 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const hoursPerWeek = parseFloat(searchParams.get("hoursPerWeek") || "20");
-  const weeks = parseInt(searchParams.get("weeks") || "4");
-  const skillFilter = searchParams.get("skill");
+  const parsed = querySchema.safeParse({
+    hoursPerWeek: searchParams.get("hoursPerWeek") || undefined,
+    weeks: searchParams.get("weeks") || undefined,
+    skill: searchParams.get("skill") || undefined,
+  });
+
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Invalid parameters", details: parsed.error.flatten() },
+      { status: 400 }
+    );
+  }
+
+  const hoursPerWeek = parsed.data.hoursPerWeek;
+  const weeks = parsed.data.weeks;
+  const skillFilter = parsed.data.skill || null;
 
   const today = new Date();
   const currentWeek = startOfWeek(today, { weekStartsOn: 1 });

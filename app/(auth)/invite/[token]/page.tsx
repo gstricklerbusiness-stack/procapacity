@@ -8,13 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import Image from "next/image";
-import { CheckCircle2, AlertCircle, Clock, Users, Loader2, Shield } from "lucide-react";
+import { CheckCircle2, AlertCircle, Clock, Users, Loader2 } from "lucide-react";
 
 const initialState: ActionState = {};
 
 interface InviteInfo {
   workspaceName: string;
-  email: string;
   valid: boolean;
 }
 
@@ -36,10 +35,10 @@ export default function InvitePage({
           const data = await res.json();
           setInviteInfo(data);
         } else {
-          setInviteInfo({ workspaceName: "", email: "", valid: false });
+          setInviteInfo({ workspaceName: "", valid: false });
         }
       } catch {
-        setInviteInfo({ workspaceName: "", email: "", valid: false });
+        setInviteInfo({ workspaceName: "", valid: false });
       } finally {
         setLoading(false);
       }
@@ -127,21 +126,6 @@ export default function InvitePage({
           </div>
         </div>
       )}
-
-      {/* Invite info */}
-      <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-slate-200 dark:bg-slate-700 rounded-full flex items-center justify-center">
-            <Shield className="h-4 w-4 text-slate-500" />
-          </div>
-          <div>
-            <p className="text-xs text-slate-500">You&apos;ll be joining as</p>
-            <p className="font-medium text-slate-900 dark:text-white text-sm">
-              {inviteInfo.email}
-            </p>
-          </div>
-        </div>
-      </div>
 
       <form action={formAction} className="space-y-5">
         <input type="hidden" name="token" value={token} />
